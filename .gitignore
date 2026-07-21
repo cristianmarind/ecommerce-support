@@ -27,6 +27,9 @@ yarn-error.log*
 Thumbs.db
 .claude/
 
+# Notas internas, no para el repo
+presentacion.md
+
 # TypeScript
 *.tsbuildinfo
 next-env.d.ts
