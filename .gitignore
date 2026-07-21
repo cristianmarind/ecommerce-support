@@ -6,6 +6,9 @@ dist/
 .next/
 out/
 
+# Manuales generados como seed (base de conocimiento futura de IA)
+backend/manuales/
+
 # Env files (se versiona .env.example, no .env)
 .env
 .env.local
