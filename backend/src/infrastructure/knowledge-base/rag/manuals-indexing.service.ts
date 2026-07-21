@@ -1,17 +1,24 @@
 import { Injectable, Logger } from '@nestjs/common';
-import * as fs from 'fs';
-import * as path from 'path';
 import { Document } from '@langchain/core/documents';
-import pdfParse from 'pdf-parse';
-import { MANUALS_DIR } from '../manuals-seed.service';
+import { MANUALS_CONTENT } from '../manuals.data';
 import { splitIntoChunks } from './text-splitter';
 import { VectorStoreProvider } from './vector-store.provider';
 
 /**
- * Carga los PDF de `manuales/`, los divide en fragmentos y los indexa como
- * vectores en Redis. Es idempotente: si el índice ya tiene documentos, no
- * vuelve a vectorizar (evita gastar llamadas a la API de embeddings en cada
- * reinicio del contenedor en modo watch).
+ * Indexa el contenido de los manuales como vectores en Redis. Es idempotente:
+ * si el índice ya tiene documentos, no vuelve a vectorizar (evita gastar
+ * llamadas a la API de embeddings en cada reinicio del contenedor en modo
+ * watch).
+ *
+ * Importante: indexa directamente MANUALS_CONTENT (el texto fuente), NO lee
+ * de vuelta los PDF generados por ManualsSeedService. Se probó leer/parsear
+ * los PDF con pdf-parse y resultó poco confiable en este entorno — generando
+ * muchos documentos seguidos con pdfkit, una fracción salía con bytes
+ * corruptos ("bad XRef entry") incluso esperando correctamente a que el
+ * stream de escritura terminara. Como el texto de los manuales ya vive en
+ * MANUALS_CONTENT, no hay necesidad de pasar por ese round-trip frágil
+ * PDF→texto solo para indexar. Los PDF se siguen generando igual (para
+ * cuando se quieran servir/descargar), pero quedan desacoplados del RAG.
  */
 @Injectable()
 export class ManualsIndexingService {
@@ -26,31 +33,18 @@ export class ManualsIndexingService {
       return;
     }
 
-    if (!fs.existsSync(MANUALS_DIR)) {
-      this.logger.warn(
-        `No se encontró la carpeta de manuales (${MANUALS_DIR}); nada para indexar.`,
-      );
-      return;
-    }
-
     if (await this.alreadyIndexed()) {
       this.logger.log('Los manuales ya estaban indexados en Redis, se omite.');
       return;
     }
 
-    const files = fs
-      .readdirSync(MANUALS_DIR)
-      .filter((file) => file.endsWith('.pdf'));
-
     const documents: Document[] = [];
-    for (const file of files) {
-      const filePath = path.join(MANUALS_DIR, file);
-      const buffer = fs.readFileSync(filePath);
-      const { text } = await pdfParse(buffer);
+    for (const [categoria, datos] of Object.entries(MANUALS_CONTENT)) {
+      const text = [datos.titulo, ...datos.contenido].join('\n\n');
 
       for (const chunk of splitIntoChunks(text)) {
         documents.push(
-          new Document({ pageContent: chunk, metadata: { source: file } }),
+          new Document({ pageContent: chunk, metadata: { source: categoria } }),
         );
       }
     }
@@ -62,7 +56,9 @@ export class ManualsIndexingService {
 
     await store.addDocuments(documents);
     this.logger.log(
-      `Manuales indexados en Redis: ${documents.length} fragmentos de ${files.length} PDFs.`,
+      `Manuales indexados en Redis: ${documents.length} fragmentos de ${
+        Object.keys(MANUALS_CONTENT).length
+      } categorías.`,
     );
   }
 

@@ -72,25 +72,45 @@ separado a propósito, para no duplicar la misma información.
 (`infrastructure/knowledge-base/rag/`). Flujo:
 
 1. `ManualsSeedService.generate()` crea los PDF por categoría en `backend/manuales/`
-   (ver `manuals.data.ts`) si no existen.
-2. `ManualsIndexingService.indexManuals()` los parsea (`pdf-parse`, sin depender de
-   `@langchain/community`), los trocea (`text-splitter.ts`, chunker manual — ver por
-   qué abajo) y los indexa en Redis vía `RedisVectorStore` (`@langchain/redis`).
-3. `KnowledgeBaseBootstrapService` (`OnApplicationBootstrap`) orquesta 1→2 en ese orden
-   explícito — importa que exista el PDF antes de indexarlo, por eso no se deja como dos
-   hooks de bootstrap independientes.
+   (ver `manuals.data.ts`) si no existen. Son para servir/descargar más adelante — el
+   RAG **no los lee de vuelta** (ver por qué abajo).
+2. `ManualsIndexingService.indexManuals()` indexa en Redis (`RedisVectorStore` de
+   `@langchain/redis`) el texto de `MANUALS_CONTENT` directamente — la misma fuente que
+   usa `ManualsSeedService` para generar los PDF —, troceado con un chunker propio
+   mínimo (`text-splitter.ts`).
+3. `KnowledgeBaseBootstrapService` (`OnApplicationBootstrap`, con try/catch: un fallo acá
+   nunca debe tumbar el arranque del backend) corre 1 y 2. Ya no hay dependencia de orden
+   entre ambos (el indexado no lee los PDF), se mantienen secuenciales por prolijidad.
 4. `LangchainRagService.query(question)`: busca los fragmentos más similares en Redis
    (`similaritySearchWithScore`), arma un prompt con ese contexto, se lo pasa al modelo
    de chat (`ChatOpenAI` o `ChatAnthropic`, según `AI_PROVIDER`), y retorna
    `{ aiSuggestedResponse, confidenceScore }`. `confidenceScore` sale de la distancia de
    la búsqueda vectorial (heurístico `1 - distancia`, no calibrado), no de que el modelo
-   se autoevalúe.
+   se autoevalúe. Probado end-to-end con una API key real de OpenAI: retrieval +
+   generación + score funcionan correctamente.
 
 **Sin `AI_API_KEY`/`OPENAI_API_KEY` configuradas, todo sigue funcionando**: cada paso
 (`VectorStoreProvider.getStore()`, `LangchainRagService.query()`) detecta la ausencia de
 key y degrada con gracia (logs de warning + una respuesta de fallback con
 `confidenceScore: 0`), en vez de tirar la app abajo. Mantené este patrón si tocás este
 código.
+
+**Gotcha real de este repo — `pdfkit` genera PDF corruptos intermitentemente**: al
+generar varios PDF seguidos con `pdfkit` en este entorno, una fracción (~10-40% en
+pruebas aisladas de 20+ corridas) salía con bytes corruptos y no lo detectaba `file` ni
+un `fsync` explícito tras el evento `finish` del stream — solo se manifestaba al
+intentar volver a parsearlos (`pdf-parse` tiraba `bad XRef entry`, no reproducible de
+forma determinística: fallaban archivos distintos en cada corrida). No se identificó la
+causa raíz exacta dentro de `pdfkit`/`fontkit`. La solución no fue perseguir ese bug de
+la librería, sino **eliminar el round-trip**: `ManualsIndexingService` indexa
+`MANUALS_CONTENT` (texto fuente) directamente en vez de leer/parsear los PDF generados,
+así que esto ya no afecta al RAG. Si en algún momento se necesita indexar PDF subidos
+externamente (no generados por este repo), hay que resolver esa fragilidad de verdad
+antes (probar otra librería de generación, o parsear con reintentos + validación de
+checksum) — no asumir que un simple `await` del stream alcanza, según lo visto acá. Este
+bug también significa que los PDF en `backend/manuales/` pueden salir ocasionalmente
+corruptos como *documento descargable*; como todavía no se sirven a ningún usuario, no
+se atacó ese ángulo — señalarlo si se implementa esa función.
 
 **Gotcha real de este repo — versiones de LangChain JS**: el ecosistema `@langchain/*`
 tiene versiones mutuamente incompatibles circulando a la vez (`@langchain/community`
