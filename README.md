@@ -330,6 +330,86 @@ backend/src/
   main.ts
 ```
 
+## DevOps, Infraestructura y Seguridad
+
+Hoy todo corre en Docker Compose (desarrollo local). Esta sección es un plan
+concreto para llevarlo a AWS sin rediseñar la app — cada contenedor de
+`docker-compose.yml` mapea a un servicio gestionado.
+
+### Servicios de AWS por componente
+
+| Componente actual (Docker Compose)                       | Servicio en AWS                                                            | Notas                                                                 |
+|------------------------------------------------------------|-----------------------------------------------------------------------------|------------------------------------------------------------------------|
+| `frontend` (Next.js)                                       | ECS Fargate + ALB, detrás de CloudFront                                    | Mismo Dockerfile (build de producción); CloudFront cachea assets y termina TLS |
+| `backend` (NestJS)                                          | ECS Fargate + ALB (interno)                                                | Mismo Dockerfile; auto scaling por CPU/request count                  |
+| `postgres`                                                  | RDS for PostgreSQL (Multi-AZ)                                              | Backups automáticos, encryption at rest                                |
+| `redis` (Redis Stack, necesita RediSearch)                  | Sin equivalente directo en ElastiCache — ver gotcha abajo                  | Self-host en EC2/ECS, o migrar el vector store a pgvector/OpenSearch    |
+| Imágenes Docker                                             | Amazon ECR                                                                 | Build en CI, push por tag/SHA                                          |
+| `backend/.env` / `.env` (raíz)                              | AWS Secrets Manager o SSM Parameter Store (SecureString)                   | Nunca como variables planas en la task definition                      |
+| DNS                                                         | Route 53                                                                   | `app.dominio.com` → CloudFront, `api.dominio.com` → ALB del backend    |
+| Certificados TLS                                            | AWS Certificate Manager (ACM)                                              | En el ALB y en CloudFront                                               |
+| Logs y métricas                                             | CloudWatch Logs + Alarms                                                   | Un log group por servicio de ECS                                       |
+| CI/CD                                                       | GitHub Actions → build/push a ECR → `ecs update-service` (o CodePipeline)  |                                                                          |
+| Infraestructura como código                                 | Terraform o AWS CDK                                                        | Reproducible entre ambientes (dev/staging/prod)                        |
+
+### Plan de despliegue (resumen)
+
+1. **Red**: VPC con subnets públicas (solo ALB/NAT) y privadas (ECS, RDS, Redis).
+   NAT Gateway para que el backend llegue a las API de OpenAI/Anthropic.
+2. **Imágenes**: build de `backend`/`frontend` en modo producción (no el
+   `Dockerfile.dev` de hot-reload) y push a ECR.
+3. **Datos**: levantar RDS PostgreSQL (Multi-AZ) y correr las migraciones
+   (`npm run migration:run`) como paso del pipeline, no a mano.
+4. **Vector store**: resolver Redis Stack self-hosted vs. pgvector/OpenSearch
+   (ver gotcha) antes de indexar los manuales en el ambiente nuevo.
+5. **Secretos**: `JWT_ACCESS_SECRET`/`JWT_REFRESH_SECRET` (rotados, nunca los
+   de `.env.example`), `AI_API_KEY`/`OPENAI_API_KEY` y credenciales de RDS van
+   a Secrets Manager, referenciados desde las task definitions de ECS.
+6. **Cómputo**: task definitions de Fargate para `backend`/`frontend`, ALB con
+   path-based routing (o uno por servicio), auto scaling por CPU/memoria o
+   request count.
+7. **Borde**: CloudFront delante del frontend + ACM para TLS + Route 53 para
+   el DNS.
+8. **Observabilidad**: logs de contenedor a CloudWatch, alarms básicas (5xx
+   del ALB, CPU/memoria de las tasks, conexiones de RDS).
+
+### Gotcha real de esta migración — Redis Stack no tiene equivalente gestionado
+
+El RAG depende de **RediSearch** (búsqueda vectorial), que trae
+`redis-stack-server`, no el Redis vanilla. **Amazon ElastiCache no soporta
+módulos de Redis** (ni RediSearch ni ningún otro), así que no es un reemplazo
+directo. Dos caminos reales al migrar:
+- Self-hostear Redis Stack en EC2 o como tarea de ECS con volumen EBS/EFS
+  persistente (parecido a lo que corre hoy, pero hay que operarlo: backups,
+  parches, alta disponibilidad manual).
+- Reemplazar `VectorStoreProvider`/`RedisVectorStore` por un backend con
+  equivalente gestionado: **pgvector** como extensión de la misma RDS
+  PostgreSQL (un solo motor de datos, sin infraestructura nueva) o **Amazon
+  OpenSearch Service** (k-NN nativo). Cualquiera de las dos cambia la
+  implementación de `RagQueryPort`/`ManualsIndexingService`, no el dominio.
+
+### Seguridad
+
+- **Secretos**: nunca en la imagen ni en variables de entorno planas de la
+  task definition — Secrets Manager/SSM, inyectados en runtime. Rotación
+  periódica de `JWT_ACCESS_SECRET`/`JWT_REFRESH_SECRET` y credenciales de RDS.
+- **Red**: security groups por capa — el ALB acepta 443 desde internet; ECS
+  solo acepta tráfico del security group del ALB; RDS y Redis solo aceptan
+  tráfico del security group de ECS (nunca expuestos a internet).
+- **IAM**: task role por servicio con permisos mínimos (ej. el backend solo
+  puede leer los secretos que efectivamente usa, no todos los del proyecto).
+- **TLS en tránsito**: ACM en ALB/CloudFront; conexión a RDS forzando SSL
+  (`sslmode=require`).
+- **Cifrado en reposo**: RDS y los volúmenes de Redis Stack (si es
+  self-hosted) con encryption at rest habilitado.
+- **WAF**: AWS WAF delante de CloudFront/ALB (rate limiting, reglas
+  administradas) como capa adicional a las defensas que ya existen en la app
+  (`PromptSafetyGuard` contra prompt injection, guards de auth/rol).
+- **Backups**: snapshots automáticos de RDS; si Redis Stack es self-hosted,
+  snapshots del volumen EBS/EFS (los vectores se pueden re-indexar desde
+  `MANUALS_CONTENT`, pero no conviene depender de eso como estrategia de
+  recuperación).
+
 ## Próximos pasos
 
 - Endpoints de gestión de usuarios/roles/permisos (alta de usuarios, cambio de
@@ -339,5 +419,8 @@ backend/src/
   quemados; solo la respuesta sugerida usa el RAG real).
 - Mensajes de seguimiento del cliente (deshabilitado a propósito para esta demo, ver
   nota en `POST /tickets/:id/agent-messages` arriba).
+- Desplegar en AWS siguiendo el plan de
+  [DevOps, Infraestructura y Seguridad](#devops-infraestructura-y-seguridad) — hoy el
+  proyecto solo corre en Docker Compose local.
 
 Ver [CLAUDE.md](./CLAUDE.md) para más contexto de trabajo con Claude Code en este repo.
