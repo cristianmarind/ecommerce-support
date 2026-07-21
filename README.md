@@ -5,10 +5,9 @@ describe su problema, un RAG (LangChain + Redis + OpenAI/Anthropic) responde usa
 manuales internos como base de conocimiento, y si no alcanza, un agente humano lo atiende
 a través de un hilo de mensajes.
 
-Persistencia real en PostgreSQL y RAG real sobre Redis ya están conectados de punta a
-punta, pero **todavía no hay autenticación real**: tanto la API (guards/decoradores
-quemados) como el login del frontend (usuarios quemados) simulan la identidad del usuario
-en vez de validarla de verdad — ver [Autenticación (quemada por ahora)](#autenticación-quemada-por-ahora).
+Persistencia real en PostgreSQL, RAG real sobre Redis, y **autenticación/autorización
+reales** (JWT + bcrypt, 2 roles) ya están conectados de punta a punta — ver
+[Autenticación (JWT)](#autenticación-jwt).
 
 ## Stack
 
@@ -22,7 +21,7 @@ en vez de validarla de verdad — ver [Autenticación (quemada por ahora)](#aute
 **Frontend** (`frontend/`)
 - React + Next.js (App Router) + TypeScript
 - TailwindCSS
-- Login quemado + vista de cliente (crear ticket) + panel de administrador/agente
+- Login real (JWT) + vista de cliente (crear ticket) + panel de administrador/agente
 
 **Infraestructura**
 - Docker Compose con hot-reload (volúmenes montados) para desarrollo
@@ -37,9 +36,16 @@ en vez de validarla de verdad — ver [Autenticación (quemada por ahora)](#aute
 1. Copia los archivos de variables de entorno de ejemplo (si no existen ya):
 
    ```bash
+   cp .env.example .env
    cp backend/.env.example backend/.env
    cp frontend/.env.example frontend/.env
    ```
+
+   El `.env` de la raíz solo tiene las credenciales de Postgres (`POSTGRES_USER`/
+   `POSTGRES_PASSWORD`/`POSTGRES_DB`) — el servicio `postgres` de
+   `docker-compose.yml` las lee de ahí en vez de tenerlas hardcodeadas en el
+   propio compose file, y separadas de `backend/.env` para que el contenedor de
+   Postgres no reciba API keys/secretos de JWT que no necesita.
 
 2. (Opcional) Completa `AI_API_KEY` en `backend/.env` para que el RAG responda de verdad
    — ver [IA / RAG](#ia--rag). Sin key, la app funciona igual, pero el mensaje de IA de
@@ -52,9 +58,9 @@ en vez de validarla de verdad — ver [Autenticación (quemada por ahora)](#aute
    ```
 
    Al arrancar, el backend: corre las migraciones pendientes (schema + seed de roles,
-   permisos y 2 usuarios demo), genera los PDF de manuales si no existen, y los indexa
-   como vectores en Redis si el índice todavía está vacío. Todo idempotente — reiniciar
-   el contenedor no repite trabajo ya hecho.
+   permisos y 2 usuarios demo), e indexa los manuales como vectores en Redis si el índice
+   todavía está vacío. Todo idempotente — reiniciar el contenedor no repite trabajo ya
+   hecho.
 
 4. Servicios disponibles:
 
@@ -77,12 +83,12 @@ docker compose down
 
 ## Vistas del frontend
 
-Login quemado en `/login` (dos usuarios de prueba, contraseña `password` para ambos):
+Login real en `/login` (dos usuarios de prueba, contraseña `password` para ambos):
 
 | Usuario                          | Rol     | Redirige a |
 |-----------------------------------|---------|------------|
-| `cliente.demo@imagineapps.test`   | Cliente | `/cliente` |
-| `admin.demo@imagineapps.test`     | Admin   | `/admin`   |
+| `cliente.demo@imagineapps.test`   | `user`  | `/cliente` |
+| `admin.demo@imagineapps.test`     | `admin` | `/admin`   |
 
 - **`/cliente`**: formulario para describir un problema. Al enviarlo, muestra la
   respuesta que generó la IA (RAG) y su `confidence_score`.
@@ -90,9 +96,11 @@ Login quemado en `/login` (dos usuarios de prueba, contraseña `password` para a
   `confidence_score` del mensaje de IA, y botones **Cerrar Ticket**
   (`status → RESUELTO_AGENTE`) y **Reasignar a Humano** (`status → PENDIENTE_AGENTE`).
 
-La sesión se guarda en `localStorage` del navegador; es solo para la experiencia de
-usuario del frontend — el backend no la valida (usa sus propios guards/decoradores
-quemados, ver abajo). `/` y `/admin` redirigen a `/login` si no hay sesión válida.
+El login llama a `POST /auth/login` y guarda el `accessToken`/`refreshToken` reales en
+`localStorage`; cada request al backend lleva el `accessToken` como `Bearer`, y si vence
+(dura 15 min) se renueva automáticamente con el `refreshToken` antes de reintentar. `/` y
+`/admin` redirigen a `/login` si no hay una sesión válida — ver
+[Autenticación (JWT)](#autenticación-jwt).
 
 ## Modelo de datos
 
@@ -105,10 +113,11 @@ Ticket (description, status, category) ---< Message (senderType, content, sugges
 ```
 
 - **User / Role / Permission / RolePermission**: base RBAC. Un `User` tiene un único
-  `Role`; un `Role` tiene muchos `Permission` a través de `RolePermission`. Tanto
-  clientes como agentes/admins son `User`, diferenciados por su rol. Todavía no hay
-  endpoints ni casos de uso para gestionarlos — solo existen como esquema + datos
-  semilla, listos para cuando se implemente autenticación real.
+  `Role` (`admin` o `user`); un `Role` tiene muchos `Permission` a través de
+  `RolePermission` (esta tabla existe en el esquema pero todavía no se usa — la
+  autorización hoy es solo por rol, no por permiso fino). `User` también tiene
+  `password_hash` y `refresh_token_hash` para la autenticación real. Todavía no hay
+  endpoints de gestión de usuarios — solo los 2 usuarios demo sembrados por migración.
 - **Ticket**: el problema reportado. `status` puede ser `RESOLVIENDO_IA`, `RESUELTO_IA`,
   `PENDIENTE_AGENTE`, `RESOLVIENDO_AGENTE` o `RESUELTO_AGENTE`.
 - **Message**: el hilo de conversación de un ticket (respuesta de IA, mensajes del
@@ -122,9 +131,9 @@ Todas las tablas comparten las columnas de auditoría mínimas: `id`, `createdAt
 
 Al crear un ticket, `CreateTicketUseCase` le pregunta a `TicketAiAnalysisPort` (un solo
 puerto de dominio) por `{ category, aiSuggestedResponse, confidenceScore }`, usando los
-manuales de soporte (PDF por categoría, generados en `backend/manuales/`) como base de
-conocimiento. Hay **dos estrategias intercambiables** para resolver ese puerto (patrón
-Strategy), elegidas por `AI_ANALYSIS_STRATEGY`:
+manuales de soporte (texto por categoría en `manuals.data.ts`, sin PDF de por medio) como
+base de conocimiento. Hay **dos estrategias intercambiables** para resolver ese puerto
+(patrón Strategy), elegidas por `AI_ANALYSIS_STRATEGY`:
 
 - **`structured`** (default): un único llamado al modelo con *Structured Output/function
   calling*, que devuelve categoría + respuesta + confianza juntos en un JSON. La
@@ -167,23 +176,58 @@ embeddings...`).
 > `docker compose restart backend` **no alcanza** (no vuelve a leer `.env`) — usá
 > `docker compose up -d --force-recreate backend`.
 
-## Autenticación (quemada por ahora)
+## Autenticación (JWT)
 
-Todavía no hay login real. Los endpoints están protegidos por un `FakeAuthGuard` que
-deja pasar cualquier petición, y el usuario "actual" se obtiene con el decorador
-`@CurrentUserId('customer' | 'admin')`, que retorna el id de uno de los 2 usuarios
-sembrados por la migración en vez de leer un token real:
+Login/refresh/logout reales, con **2 roles**: `admin` y `user`.
 
-- Cliente demo: `11111111-1111-1111-1111-111111111111` (usado al crear tickets/mensajes)
-- Admin demo: `22222222-2222-2222-2222-222222222222` (usado al listar/actualizar tickets)
+- Cliente demo: `cliente.demo@imagineapps.test` (rol `user`) — id
+  `11111111-1111-1111-1111-111111111111`.
+- Admin demo: `admin.demo@imagineapps.test` (rol `admin`) — id
+  `22222222-2222-2222-2222-222222222222`.
+- Contraseña de ambos: `password`.
 
-Ambos archivos (`infrastructure/http/auth/guards/fake-auth.guard.ts` y
-`.../decorators/current-user-id.decorator.ts`) tienen comentarios `TODO` marcando
-exactamente dónde iría la lógica real de autenticación, autorización y "get current
-user" cuando se implemente. El login del frontend (`/login`) es un paso más de UX sobre
-lo mismo: no está conectado a esta identidad real, solo la simula visualmente.
+```bash
+# Login
+curl -X POST http://localhost:3001/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin.demo@imagineapps.test","password":"password"}'
+# → { "accessToken": "...", "refreshToken": "..." }
+
+# Usar el access token en cualquier endpoint protegido
+curl http://localhost:3001/api/v1/tickets \
+  -H "Authorization: Bearer <accessToken>"
+
+# Renovar (rota el refresh token: el usado queda invalidado)
+curl -X POST http://localhost:3001/api/v1/auth/refresh-token \
+  -H "Content-Type: application/json" \
+  -d '{"refreshToken":"<refreshToken>"}'
+
+# Logout (revoca el refresh token vigente)
+curl -X POST http://localhost:3001/api/v1/auth/logout \
+  -H "Authorization: Bearer <accessToken>"
+```
+
+Todos los endpoints de `/tickets` requieren `Authorization: Bearer <accessToken>`
+(`JwtAuthGuard`) y el rol correcto (`RolesGuard` + `@Roles(...)`): las rutas de "mis
+casos"/crear ticket/enviar mensaje son de rol `user`; listar todos los tickets, ver el
+detalle de cualquiera, responder como agente y cambiar el estado son de rol `admin`.
+
+**Simplificación deliberada**: una sola sesión activa por usuario — el hash del refresh
+token vigente vive en la misma fila de `users` (columna `refresh_token_hash`), no en una
+tabla aparte de sesiones. Un login nuevo invalida cualquier refresh token anterior de ese
+usuario. El hash usa SHA-256 (no bcrypt: bcrypt trunca a 72 bytes y los JWT son más
+largos y comparten prefijo entre sí, lo que rompía la invalidación al rotar).
+
+Variables de entorno nuevas en `backend/.env`: `JWT_ACCESS_SECRET`,
+`JWT_ACCESS_EXPIRES_IN` (15m default), `JWT_REFRESH_SECRET`, `JWT_REFRESH_EXPIRES_IN` (7d
+default). Los secretos deben ser aleatorios y distintos entre sí
+(`openssl rand -hex 32`) en cualquier ambiente real — los de `.env.example` vienen
+vacíos a propósito.
 
 ## Endpoints actuales
+
+> Todos los endpoints de `/tickets` (abajo) requieren `Authorization: Bearer
+> <accessToken>` — ver [Autenticación (JWT)](#autenticación-jwt) para cómo obtenerlo.
 
 ### `POST /api/v1/tickets`
 
@@ -213,14 +257,19 @@ Crea un ticket y genera automáticamente el primer mensaje de IA usando el RAG.
 }
 ```
 
-### `POST /api/v1/tickets/:id/messages`
+### `POST /api/v1/tickets/:id/agent-messages`
 
-Agrega un mensaje del cliente al hilo de un ticket existente.
+Agrega un mensaje de un agente/admin al hilo de un ticket existente. Rol `admin`.
 
 ```json
 // Request
-{ "content": "¿Cuándo tendré una respuesta?" }
+{ "content": "Ya estamos revisando tu caso." }
 ```
+
+> No existe un endpoint para que el cliente agregue mensajes de seguimiento — está
+> deshabilitado a propósito para esta demo (ver [Autenticación (JWT)](#autenticación-jwt)
+> y la UI de `/cliente/:id`, que muestra "Enviar mensajes no está disponible en esta
+> demo." en vez de un formulario funcional).
 
 ### `PATCH /api/v1/tickets/:id/status`
 
@@ -270,8 +319,9 @@ backend/src/
   domain/           # Entidades y puertos (interfaces), sin dependencias externas
   application/      # Casos de uso, orquestan el dominio a través de los puertos
   infrastructure/
-    http/           # Controllers, DTOs, guards/decoradores de auth (quemados)
-    knowledge-base/  # Generación de manuales (PDF) + pipeline RAG (LangChain/Redis)
+    http/           # Controllers, DTOs, guards/decoradores de auth JWT reales
+    auth/            # JwtTokenService (implementación del puerto TokenService)
+    knowledge-base/  # Contenido de los manuales (texto) + pipeline RAG (LangChain/Redis)
     persistence/typeorm/
       entities/     # Entidades TypeORM (mapeo a tablas)
       repositories/ # Implementaciones de los puertos del dominio
@@ -282,11 +332,12 @@ backend/src/
 
 ## Próximos pasos
 
-- Autenticación y autorización reales (reemplazar `FakeAuthGuard`/`CurrentUserId` y
-  conectar el login del frontend a esa identidad real).
-- Endpoints de gestión de usuarios/roles/permisos.
+- Endpoints de gestión de usuarios/roles/permisos (alta de usuarios, cambio de
+  contraseña — hoy solo existen los 2 usuarios demo).
+- Autorización fina por permisos (`Permission`/`RolePermission` siguen sin usarse).
 - Categorización automática del ticket por IA (hoy `category`/`status` inicial siguen
   quemados; solo la respuesta sugerida usa el RAG real).
-- UI para que el cliente envíe mensajes de seguimiento y para que un agente responda.
+- Mensajes de seguimiento del cliente (deshabilitado a propósito para esta demo, ver
+  nota en `POST /tickets/:id/agent-messages` arriba).
 
 Ver [CLAUDE.md](./CLAUDE.md) para más contexto de trabajo con Claude Code en este repo.
