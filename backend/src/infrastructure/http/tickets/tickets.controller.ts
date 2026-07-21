@@ -17,6 +17,8 @@ import { SendMessageUseCase } from '../../../application/tickets/use-cases/send-
 import { UpdateTicketStatusUseCase } from '../../../application/tickets/use-cases/update-ticket-status.use-case';
 import { CurrentUserId } from '../auth/decorators/current-user-id.decorator';
 import { FakeAuthGuard } from '../auth/guards/fake-auth.guard';
+import { CheckPromptSafety } from '../guards/check-prompt-safety.decorator';
+import { PromptSafetyGuard } from '../guards/prompt-safety.guard';
 import { CreateMessageRequestDto } from './dto/create-message-request.dto';
 import { CreateTicketRequestDto } from './dto/create-ticket-request.dto';
 import { MessageResponseDto } from './dto/message-response.dto';
@@ -35,6 +37,8 @@ export class TicketsController {
   ) {}
 
   @Post()
+  @UseGuards(PromptSafetyGuard)
+  @CheckPromptSafety('description')
   async create(
     @Body() dto: CreateTicketRequestDto,
     @CurrentUserId('customer') customerId: string,
@@ -66,6 +70,8 @@ export class TicketsController {
   }
 
   @Post(':id/messages')
+  @UseGuards(PromptSafetyGuard)
+  @CheckPromptSafety('content')
   async sendMessage(
     @Param('id', ParseUUIDPipe) ticketId: string,
     @Body() dto: CreateMessageRequestDto,

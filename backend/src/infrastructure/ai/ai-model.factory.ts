@@ -20,21 +20,23 @@ export class AiModelFactory {
     return loadAiConfig(this.configService);
   }
 
-  getChatModel(): BaseChatModel | null {
+  getChatModel(options?: { temperature?: number }): BaseChatModel | null {
     const config = this.getConfig();
     if (!config.chatApiKey) return null;
 
-    if (config.provider === 'anthropic') {
-      return new ChatAnthropic({
-        apiKey: config.chatApiKey,
-        model: config.chatModel,
-      });
-    }
-
-    return new ChatOpenAI({
+    const modelOptions = {
       apiKey: config.chatApiKey,
       model: config.chatModel,
-    });
+      ...(options?.temperature !== undefined
+        ? { temperature: options.temperature }
+        : {}),
+    };
+
+    if (config.provider === 'anthropic') {
+      return new ChatAnthropic(modelOptions);
+    }
+
+    return new ChatOpenAI(modelOptions);
   }
 
   getEmbeddings(): Embeddings | null {
