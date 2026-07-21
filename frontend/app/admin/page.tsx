@@ -82,6 +82,7 @@ export default function AdminPage() {
         onPageChange={setPage}
         onCloseTicket={(ticket) => handleStatusChange(ticket, 'RESUELTO_AGENTE')}
         onReassignTicket={(ticket) => handleStatusChange(ticket, 'PENDIENTE_AGENTE')}
+        onConfirmAiResolution={(ticket) => handleStatusChange(ticket, 'RESUELTO_IA')}
       />
     </main>
   );

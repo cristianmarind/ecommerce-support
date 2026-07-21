@@ -2,6 +2,8 @@ import { ConfigService } from '@nestjs/config';
 
 export type AiProvider = 'openai' | 'anthropic';
 
+export type TicketAnalysisStrategyName = 'separate' | 'structured';
+
 export interface AiConfig {
   provider: AiProvider;
   /** API key para GENERAR la respuesta (OpenAI o Anthropic, según provider). */
@@ -14,6 +16,15 @@ export interface AiConfig {
    */
   embeddingsApiKey: string | null;
   embeddingsModel: string;
+  /**
+   * Qué estrategia usa TicketAiAnalysisPort para obtener
+   * category/ai_suggested_response/confidence_score:
+   * "structured" (default) = un único llamado con Structured Output;
+   * "separate" = RAG + clasificador como dos llamadas independientes.
+   */
+  analysisStrategy: TicketAnalysisStrategyName;
+  /** A partir de qué confidence_score se considera que la IA "resolvió" el ticket. */
+  confidenceThreshold: number;
 }
 
 export function loadAiConfig(configService: ConfigService): AiConfig {
@@ -30,11 +41,21 @@ export function loadAiConfig(configService: ConfigService): AiConfig {
     'text-embedding-3-small',
   );
 
+  const analysisStrategy: TicketAnalysisStrategyName =
+    configService.get<string>('AI_ANALYSIS_STRATEGY', 'structured') === 'separate'
+      ? 'separate'
+      : 'structured';
+  const confidenceThreshold = Number(
+    configService.get<string>('AI_CONFIDENCE_THRESHOLD', '0.7'),
+  );
+
   return {
     provider,
     chatApiKey,
     chatModel,
     embeddingsApiKey,
     embeddingsModel,
+    analysisStrategy,
+    confidenceThreshold,
   };
 }

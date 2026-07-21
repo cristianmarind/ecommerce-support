@@ -65,33 +65,52 @@ auditoría genérico — también identifica quién es el solicitante/autor real
 que abrió el ticket o escribió el mensaje). No se agregó un campo `customerId`/`authorId`
 separado a propósito, para no duplicar la misma información.
 
-## RAG (LangChain + Redis + OpenAI/Anthropic)
+## RAG + clasificación (LangChain + Redis + OpenAI/Anthropic)
 
-`CreateTicketUseCase` depende del puerto de dominio `RagQueryPort`
-(`domain/knowledge-base/rag-query.port.ts`), implementado por `LangchainRagService`
-(`infrastructure/knowledge-base/rag/`). Flujo:
+`CreateTicketUseCase` depende de UN solo puerto de dominio,
+`TicketAiAnalysisPort` (`domain/tickets/ticket-ai-analysis.port.ts`), que retorna
+`{ category, aiSuggestedResponse, confidenceScore }` — el resultado completo del
+análisis de IA de un ticket. Tiene **dos implementaciones intercambiables (patrón
+Strategy)**, seleccionadas por `AI_ANALYSIS_STRATEGY`:
 
+- **`structured`** (default) — `StructuredOutputTicketAiAnalysisStrategy`
+  (`infrastructure/knowledge-base/ticket-analysis/`): un único llamado al modelo de
+  chat con Structured Output/function calling (`chatModel.withStructuredOutput(schema)`
+  de `@langchain/core`) que devuelve los 3 campos juntos en un JSON. `confidence_score`
+  sale de que el modelo se **autoevalúe** (suele ser más "generoso" que el heurístico de
+  distancia — en pruebas, 1.0 vs ~0.77 para el mismo texto).
+- **`separate`** — `SeparateCallsTicketAiAnalysisStrategy`: el diseño original, envuelve
+  `RagQueryPort` (`LangchainRagService`, búsqueda vectorial + generación, confidence de
+  la distancia) y `TicketClassifierPort` (`TicketClassifierService`, clasificación en un
+  llamado aparte) corriendo en paralelo con `Promise.all`.
+
+La selección de estrategia se hace en `KnowledgeBaseModule` con un provider
+`useFactory` que lee `loadAiConfig(configService).analysisStrategy` — ambas estrategias
+se registran siempre como providers, se instancia solo la que gane. Para agregar una
+tercera estrategia: implementar `TicketAiAnalysisPort`, registrarla como provider, y
+sumarla al `useFactory`.
+
+Independientemente de la estrategia:
 1. `ManualsSeedService.generate()` crea los PDF por categoría en `backend/manuales/`
    (ver `manuals.data.ts`) si no existen. Son para servir/descargar más adelante — el
-   RAG **no los lee de vuelta** (ver por qué abajo).
+   RAG **no los lee de vuelta** (ver gotcha de pdfkit más abajo).
 2. `ManualsIndexingService.indexManuals()` indexa en Redis (`RedisVectorStore` de
    `@langchain/redis`) el texto de `MANUALS_CONTENT` directamente — la misma fuente que
-   usa `ManualsSeedService` para generar los PDF —, troceado con un chunker propio
-   mínimo (`text-splitter.ts`).
+   usa `ManualsSeedService` para generar los PDF. **Un chunk por punto numerado** (ya
+   vienen separados así en el array `contenido` de cada manual), no por cantidad de
+   caracteres — chunks más grandes (todo el manual junto) diluían la similitud de la
+   búsqueda vectorial (con eso, ni una frase casi textual del manual pasaba de ~0.69 de
+   score; con chunks finos llega a ~0.77+).
 3. `KnowledgeBaseBootstrapService` (`OnApplicationBootstrap`, con try/catch: un fallo acá
-   nunca debe tumbar el arranque del backend) corre 1 y 2. Ya no hay dependencia de orden
-   entre ambos (el indexado no lee los PDF), se mantienen secuenciales por prolijidad.
-4. `LangchainRagService.query(question)`: busca los fragmentos más similares en Redis
-   (`similaritySearchWithScore`), arma un prompt con ese contexto, se lo pasa al modelo
-   de chat (`ChatOpenAI` o `ChatAnthropic`, según `AI_PROVIDER`), y retorna
-   `{ aiSuggestedResponse, confidenceScore }`. `confidenceScore` sale de la distancia de
-   la búsqueda vectorial (heurístico `1 - distancia`, no calibrado), no de que el modelo
-   se autoevalúe. Probado end-to-end con una API key real de OpenAI: retrieval +
-   generación + score funcionan correctamente.
+   nunca debe tumbar el arranque del backend) corre 1 y 2.
 
-**Sin `AI_API_KEY`/`OPENAI_API_KEY` configuradas, todo sigue funcionando**: cada paso
-(`VectorStoreProvider.getStore()`, `LangchainRagService.query()`) detecta la ausencia de
-key y degrada con gracia (logs de warning + una respuesta de fallback con
+**`CreateTicketUseCase`** decide el `status`/contenido visible al cliente comparando
+`confidenceScore` contra `AI_CONFIDENCE_THRESHOLD` (default `0.7`, env var) — ver esa
+lógica y sus comentarios ahí, no en las estrategias (es una regla de negocio, no de IA).
+
+**Sin `AI_API_KEY`/`OPENAI_API_KEY` configuradas, todo sigue funcionando**: cada
+implementación (`VectorStoreProvider.getStore()`, ambas estrategias) detecta la
+ausencia de key y degrada con gracia (logs de warning + un análisis de fallback con
 `confidenceScore: 0`), en vez de tirar la app abajo. Mantené este patrón si tocás este
 código.
 
@@ -126,7 +145,8 @@ compatible con la que ya está instalada (`npm view @langchain/core version` par
 
 Variables de entorno relevantes (`backend/.env`): `AI_PROVIDER`, `AI_API_KEY`,
 `AI_MODEL`, `OPENAI_API_KEY` (embeddings, siempre OpenAI), `EMBEDDINGS_MODEL`,
-`REDIS_URL`, `REDIS_INDEX_NAME`. Detalle de cada una en README.md.
+`REDIS_URL`, `REDIS_INDEX_NAME`, `AI_ANALYSIS_STRATEGY` (`structured`|`separate`),
+`AI_CONFIDENCE_THRESHOLD` (0-1). Detalle de cada una en README.md.
 
 ## Autenticación quemada
 
@@ -159,7 +179,8 @@ NestJS con **arquitectura hexagonal a nivel de raíz** (no por módulo/feature p
 ```
 backend/src/
   domain/
-    tickets/               # Entidad Ticket, TicketStatus/TicketCategory, puerto TicketRepository
+    tickets/               # Entidad Ticket, TicketStatus/TicketCategory, puertos
+                            # (TicketRepository, TicketAiAnalysisPort, TicketClassifierPort)
     messages/               # Entidad Message, MessageSenderType, puerto MessageRepository
     knowledge-base/         # Puerto RagQueryPort
     common/                 # AuditableFields (contrato de campos de auditoría)
@@ -169,11 +190,15 @@ backend/src/
     http/
       tickets/               # Controller y DTOs (adaptador de entrada)
       auth/                  # Guards/decoradores de auth quemados (ver arriba)
+      guards/                # PromptSafetyGuard (defensa anti prompt-injection, reusable)
+    ai/                      # ai-config, AiModelFactory, PromptSafetyCheckerService
     knowledge-base/
       manuals.data.ts        # Contenido de los manuales por categoría
       manuals-seed.service.ts       # Genera los PDF (idempotente)
       knowledge-base-bootstrap.service.ts  # Orquesta seed -> indexado al arrancar
-      rag/                    # ai-config, model-factory, vector-store, indexing, query
+      ticket-classifier.service.ts   # Implementa TicketClassifierPort
+      ticket-analysis/        # Las 2 estrategias de TicketAiAnalysisPort (ver RAG arriba)
+      rag/                    # vector-store, indexing, LangchainRagService (RagQueryPort)
     persistence/typeorm/
       entities/              # Entidades TypeORM (User, Role, Permission, RolePermission, Ticket, Message)
       repositories/          # Implementaciones TypeORM de los puertos del dominio
@@ -225,6 +250,16 @@ anterior. Si ves errores `Cannot find module` de un paquete que sabés que agreg
 corré `docker compose exec backend npm install` (y si eso da conflictos de peer-deps
 por deps viejas colgadas, `rm -f package-lock.json && rm -rf node_modules/@algo` seguido
 de `npm install` limpio dentro del contenedor).
+
+### Gotcha de Docker: `restart` no relee `.env`
+
+`docker compose restart backend` reinicia el proceso del contenedor pero **no vuelve a
+leer** `backend/.env` (`env_file` se aplica solo al crear el contenedor). Si cambiás una
+variable de entorno (ej. `AI_ANALYSIS_STRATEGY`, `AI_PROVIDER`, cualquier cosa en
+`.env`), `restart` sigue usando los valores viejos — hay que recrear el contenedor con
+`docker compose up -d --force-recreate backend` (o `up -d` a secas, que a veces alcanza)
+para que tome el cambio. Si cambiás una env var y el comportamiento no cambia, esta es la
+primera sospecha.
 
 ## Arquitectura del frontend
 

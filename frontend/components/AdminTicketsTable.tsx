@@ -8,6 +8,7 @@ interface AdminTicketsTableProps {
   onPageChange: (page: number) => void;
   onCloseTicket: (ticket: Ticket) => void;
   onReassignTicket: (ticket: Ticket) => void;
+  onConfirmAiResolution: (ticket: Ticket) => void;
 }
 
 export function AdminTicketsTable({
@@ -17,6 +18,7 @@ export function AdminTicketsTable({
   onPageChange,
   onCloseTicket,
   onReassignTicket,
+  onConfirmAiResolution,
 }: AdminTicketsTableProps) {
   if (isLoading && !data) {
     return <p className="text-sm text-slate-500">Cargando tickets...</p>;
@@ -36,6 +38,7 @@ export function AdminTicketsTable({
               <th className="px-4 py-3">Estado</th>
               <th className="px-4 py-3">Categoría (IA)</th>
               <th className="px-4 py-3">Confianza</th>
+              <th className="px-4 py-3">Sugerencia IA</th>
               <th className="px-4 py-3">Acciones</th>
             </tr>
           </thead>
@@ -43,6 +46,7 @@ export function AdminTicketsTable({
             {data.items.map((ticket) => {
               const aiMessage = ticket.messages.find((m) => m.senderType === 'IA');
               const isUpdating = updatingTicketId === ticket.id;
+              const isAiResolving = ticket.status === 'RESOLVIENDO_IA';
 
               return (
                 <tr key={ticket.id}>
@@ -60,8 +64,20 @@ export function AdminTicketsTable({
                       ? `${Math.round(aiMessage.confidenceScore * 100)}%`
                       : '-'}
                   </td>
+                  <td className="max-w-sm px-4 py-3 text-slate-600">
+                    {aiMessage?.suggestedResponse ?? '-'}
+                  </td>
                   <td className="px-4 py-3">
                     <div className="flex flex-col gap-1">
+                      {isAiResolving && (
+                        <button
+                          onClick={() => onConfirmAiResolution(ticket)}
+                          disabled={isUpdating}
+                          className="rounded-md border border-sky-300 px-2 py-1 text-xs font-medium text-sky-700 hover:bg-sky-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          Confirmar resolución IA
+                        </button>
+                      )}
                       <button
                         onClick={() => onCloseTicket(ticket)}
                         disabled={isUpdating}

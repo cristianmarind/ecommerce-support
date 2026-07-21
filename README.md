@@ -120,17 +120,22 @@ Todas las tablas comparten las columnas de auditoría mínimas: `id`, `createdAt
 
 ## IA / RAG
 
-Al crear un ticket, `CreateTicketUseCase` le pregunta al RAG (`RagQueryPort` en el
-dominio) por una respuesta sugerida, usando los manuales de soporte (PDF por categoría,
-generados en `backend/manuales/`) como base de conocimiento:
+Al crear un ticket, `CreateTicketUseCase` le pregunta a `TicketAiAnalysisPort` (un solo
+puerto de dominio) por `{ category, aiSuggestedResponse, confidenceScore }`, usando los
+manuales de soporte (PDF por categoría, generados en `backend/manuales/`) como base de
+conocimiento. Hay **dos estrategias intercambiables** para resolver ese puerto (patrón
+Strategy), elegidas por `AI_ANALYSIS_STRATEGY`:
 
-1. Los PDF se indexan en Redis como vectores (embeddings) al arrancar el backend.
-2. Al crear un ticket, se busca por similitud vectorial en Redis los fragmentos de
-   manual más relevantes a la descripción del problema.
-3. Esos fragmentos se pasan como contexto a un modelo de chat (OpenAI o Anthropic,
-   según configuración) para redactar la respuesta sugerida.
-4. `confidence_score` sale de la similitud de la búsqueda vectorial (no del modelo de
-   chat) — ver comentario en `LangchainRagService`.
+- **`structured`** (default): un único llamado al modelo con *Structured Output/function
+  calling*, que devuelve categoría + respuesta + confianza juntos en un JSON. La
+  confianza sale de que el modelo se autoevalúa.
+- **`separate`**: el diseño original — búsqueda vectorial + generación de respuesta por
+  un lado (confianza = similitud de la búsqueda), clasificación de categoría por otro
+  lado (otro llamado al modelo), corriendo en paralelo.
+
+En ambos casos, los manuales se indexan en Redis como vectores (embeddings) al arrancar
+el backend, con un chunk por punto/consejo del manual (no todo el manual junto, para no
+diluir la similitud de la búsqueda).
 
 Variables de entorno (`backend/.env`):
 
@@ -147,12 +152,20 @@ EMBEDDINGS_MODEL=text-embedding-3-small
 
 REDIS_URL=redis://redis:6379
 REDIS_INDEX_NAME=manuales_idx
+
+AI_ANALYSIS_STRATEGY=structured   # "structured" (default) o "separate"
+AI_CONFIDENCE_THRESHOLD=0.7        # a partir de qué confianza el ticket queda RESOLVIENDO_IA
 ```
 
-**Sin `AI_API_KEY` configurada, la app no se rompe**: el RAG detecta que falta la key,
-lo loguea como warning, y devuelve una respuesta de fallback con `confidenceScore: 0`
-("La IA todavía no está configurada..."). Esto se puede ver en los logs del backend al
-arrancar (`RAG deshabilitado: falta configurar la API key de embeddings...`).
+**Sin `AI_API_KEY` configurada, la app no se rompe**: cada estrategia detecta que falta
+la key, lo loguea como warning, y devuelve un análisis de fallback con
+`confidenceScore: 0` ("La IA todavía no está configurada..."). Esto se puede ver en los
+logs del backend al arrancar (`RAG deshabilitado: falta configurar la API key de
+embeddings...`).
+
+> Si cambiás una variable en `backend/.env` mientras el stack ya está corriendo,
+> `docker compose restart backend` **no alcanza** (no vuelve a leer `.env`) — usá
+> `docker compose up -d --force-recreate backend`.
 
 ## Autenticación (quemada por ahora)
 

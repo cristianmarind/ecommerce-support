@@ -1,7 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Document } from '@langchain/core/documents';
 import { MANUALS_CONTENT } from '../manuals.data';
-import { splitIntoChunks } from './text-splitter';
 import { VectorStoreProvider } from './vector-store.provider';
 
 /**
@@ -38,13 +37,20 @@ export class ManualsIndexingService {
       return;
     }
 
+    // Un chunk por punto numerado (ya vienen separados así en
+    // MANUALS_CONTENT), en vez de juntar todo el manual y re-cortar por
+    // cantidad de caracteres. Evita mezclar varios temas no relacionados en
+    // un mismo embedding, que diluía la similitud de la búsqueda vectorial
+    // (con chunks de todo el manual, ni una frase casi textual pasaba de
+    // ~0.69 de score).
     const documents: Document[] = [];
     for (const [categoria, datos] of Object.entries(MANUALS_CONTENT)) {
-      const text = [datos.titulo, ...datos.contenido].join('\n\n');
-
-      for (const chunk of splitIntoChunks(text)) {
+      for (const punto of datos.contenido) {
         documents.push(
-          new Document({ pageContent: chunk, metadata: { source: categoria } }),
+          new Document({
+            pageContent: `${datos.titulo}\n${punto}`,
+            metadata: { source: categoria },
+          }),
         );
       }
     }

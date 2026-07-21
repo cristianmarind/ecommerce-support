@@ -21,7 +21,8 @@ import { CheckPromptSafety } from '../guards/check-prompt-safety.decorator';
 import { PromptSafetyGuard } from '../guards/prompt-safety.guard';
 import { CreateMessageRequestDto } from './dto/create-message-request.dto';
 import { CreateTicketRequestDto } from './dto/create-ticket-request.dto';
-import { MessageResponseDto } from './dto/message-response.dto';
+import { CustomerMessageResponseDto } from './dto/customer-message-response.dto';
+import { CustomerTicketResponseDto } from './dto/customer-ticket-response.dto';
 import { PaginatedTicketsResponseDto } from './dto/paginated-tickets-response.dto';
 import { TicketResponseDto } from './dto/ticket-response.dto';
 import { UpdateTicketStatusRequestDto } from './dto/update-ticket-status-request.dto';
@@ -42,12 +43,12 @@ export class TicketsController {
   async create(
     @Body() dto: CreateTicketRequestDto,
     @CurrentUserId('customer') customerId: string,
-  ): Promise<TicketResponseDto> {
+  ): Promise<CustomerTicketResponseDto> {
     const ticket = await this.createTicketUseCase.execute(
       dto.description,
       customerId,
     );
-    return TicketResponseDto.fromDomain(ticket);
+    return CustomerTicketResponseDto.fromDomain(ticket);
   }
 
   @Get()
@@ -76,13 +77,13 @@ export class TicketsController {
     @Param('id', ParseUUIDPipe) ticketId: string,
     @Body() dto: CreateMessageRequestDto,
     @CurrentUserId('customer') customerId: string,
-  ): Promise<MessageResponseDto> {
+  ): Promise<CustomerMessageResponseDto> {
     const message = await this.sendMessageUseCase.execute(
       ticketId,
       dto.content,
       customerId,
     );
-    return MessageResponseDto.fromDomain(message);
+    return CustomerMessageResponseDto.fromDomain(message);
   }
 
   @Patch(':id/status')

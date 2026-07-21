@@ -18,8 +18,14 @@ export interface Message {
   id: string;
   senderType: MessageSenderType;
   content: string;
-  suggestedResponse: string | null;
-  confidenceScore: number | null;
+  /**
+   * Solo vienen en las respuestas de endpoints de admin (GET /tickets,
+   * PATCH /:id/status). Los endpoints de cliente (POST /tickets,
+   * POST /:id/messages) nunca los incluyen — ver customer-*-response.dto.ts
+   * en el backend.
+   */
+  suggestedResponse?: string | null;
+  confidenceScore?: number | null;
   createdAt: string;
 }
 
