@@ -15,5 +15,6 @@ export const TICKET_REPOSITORY = Symbol('TICKET_REPOSITORY');
 
 export interface TicketRepository {
   create(ticket: Ticket): Promise<Ticket>;
+  findById(id: string): Promise<Ticket | null>;
   findAll(page: number, limit: number): Promise<PaginatedResult<Ticket>>;
 }

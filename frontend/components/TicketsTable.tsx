@@ -1,5 +1,5 @@
 import { PaginatedTickets } from '@/lib/api';
-import { categoryLabels, statusLabels } from '@/lib/labels';
+import { categoryLabels, statusColors, statusLabels } from '@/lib/labels';
 
 interface TicketsTableProps {
   data: PaginatedTickets | null;
@@ -25,28 +25,29 @@ export function TicketsTable({ data, isLoading, onPageChange }: TicketsTableProp
               <th className="px-4 py-3">Descripción</th>
               <th className="px-4 py-3">Estado</th>
               <th className="px-4 py-3">Categoría</th>
-              <th className="px-4 py-3">Respuesta sugerida</th>
+              <th className="px-4 py-3">Último mensaje</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {data.items.map((ticket) => (
-              <tr key={ticket.id}>
-                <td className="max-w-xs px-4 py-3 text-slate-800">{ticket.description}</td>
-                <td className="px-4 py-3">
-                  <span
-                    className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${
-                      ticket.status === 'RESUELTO_IA'
-                        ? 'bg-emerald-100 text-emerald-700'
-                        : 'bg-amber-100 text-amber-700'
-                    }`}
-                  >
-                    {statusLabels[ticket.status]}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-slate-600">{categoryLabels[ticket.category]}</td>
-                <td className="max-w-sm px-4 py-3 text-slate-600">{ticket.suggestedResponse}</td>
-              </tr>
-            ))}
+            {data.items.map((ticket) => {
+              const lastMessage = ticket.messages[ticket.messages.length - 1];
+              return (
+                <tr key={ticket.id}>
+                  <td className="max-w-xs px-4 py-3 text-slate-800">{ticket.description}</td>
+                  <td className="px-4 py-3">
+                    <span
+                      className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${statusColors[ticket.status]}`}
+                    >
+                      {statusLabels[ticket.status]}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-slate-600">{categoryLabels[ticket.category]}</td>
+                  <td className="max-w-sm px-4 py-3 text-slate-600">
+                    {lastMessage ? lastMessage.content : '-'}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

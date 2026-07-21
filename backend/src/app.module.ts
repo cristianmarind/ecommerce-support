@@ -3,6 +3,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { buildTypeOrmConfig } from './infrastructure/config/typeorm.config';
 import { TicketsModule } from './infrastructure/http/tickets/tickets.module';
+import { IdentityModule } from './infrastructure/persistence/typeorm/identity.module';
 
 @Module({
   imports: [
@@ -12,6 +13,7 @@ import { TicketsModule } from './infrastructure/http/tickets/tickets.module';
       inject: [ConfigService],
       useFactory: buildTypeOrmConfig,
     }),
+    IdentityModule,
     TicketsModule,
   ],
 })
