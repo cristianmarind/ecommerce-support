@@ -70,6 +70,23 @@ export async function sendMessage(ticketId: string, content: string): Promise<Me
   return res.json();
 }
 
+export async function updateTicketStatus(
+  ticketId: string,
+  status: TicketStatus,
+): Promise<Ticket> {
+  const res = await fetch(`${API_URL}/tickets/${ticketId}/status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status }),
+  });
+
+  if (!res.ok) {
+    throw new Error('No se pudo actualizar el estado del ticket');
+  }
+
+  return res.json();
+}
+
 export async function getTickets(
   page: number,
   limit: number,

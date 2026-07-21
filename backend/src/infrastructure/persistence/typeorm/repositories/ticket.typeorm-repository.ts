@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Message } from '../../../../domain/messages/message.entity';
 import { Ticket } from '../../../../domain/tickets/ticket.entity';
+import { TicketStatus } from '../../../../domain/tickets/ticket-status.enum';
 import {
   PaginatedResult,
   TicketRepository,
@@ -63,6 +64,16 @@ export class TicketTypeOrmRepository implements TicketRepository {
       page,
       limit,
     };
+  }
+
+  async updateStatus(
+    id: string,
+    status: TicketStatus,
+    updaterId: string,
+  ): Promise<Ticket> {
+    await this.ticketRepo.update({ id }, { status, updaterId });
+    // El use case ya valida que el ticket exista antes de llamar esto.
+    return (await this.findById(id)) as Ticket;
   }
 
   private toDomain(entity: TicketTypeOrmEntity, messages: Message[]): Ticket {

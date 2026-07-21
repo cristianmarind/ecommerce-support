@@ -1,13 +1,23 @@
-import { PaginatedTickets } from '@/lib/api';
+import { Ticket } from '@/lib/api';
 import { categoryLabels, statusColors, statusLabels } from '@/lib/labels';
 
-interface TicketsTableProps {
-  data: PaginatedTickets | null;
+interface AdminTicketsTableProps {
+  data: { items: Ticket[]; page: number; total: number; totalPages: number } | null;
   isLoading: boolean;
+  updatingTicketId: string | null;
   onPageChange: (page: number) => void;
+  onCloseTicket: (ticket: Ticket) => void;
+  onReassignTicket: (ticket: Ticket) => void;
 }
 
-export function TicketsTable({ data, isLoading, onPageChange }: TicketsTableProps) {
+export function AdminTicketsTable({
+  data,
+  isLoading,
+  updatingTicketId,
+  onPageChange,
+  onCloseTicket,
+  onReassignTicket,
+}: AdminTicketsTableProps) {
   if (isLoading && !data) {
     return <p className="text-sm text-slate-500">Cargando tickets...</p>;
   }
@@ -24,13 +34,16 @@ export function TicketsTable({ data, isLoading, onPageChange }: TicketsTableProp
             <tr>
               <th className="px-4 py-3">Descripción</th>
               <th className="px-4 py-3">Estado</th>
-              <th className="px-4 py-3">Categoría</th>
-              <th className="px-4 py-3">Último mensaje</th>
+              <th className="px-4 py-3">Categoría (IA)</th>
+              <th className="px-4 py-3">Confianza</th>
+              <th className="px-4 py-3">Acciones</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {data.items.map((ticket) => {
-              const lastMessage = ticket.messages[ticket.messages.length - 1];
+              const aiMessage = ticket.messages.find((m) => m.senderType === 'IA');
+              const isUpdating = updatingTicketId === ticket.id;
+
               return (
                 <tr key={ticket.id}>
                   <td className="max-w-xs px-4 py-3 text-slate-800">{ticket.description}</td>
@@ -42,8 +55,28 @@ export function TicketsTable({ data, isLoading, onPageChange }: TicketsTableProp
                     </span>
                   </td>
                   <td className="px-4 py-3 text-slate-600">{categoryLabels[ticket.category]}</td>
-                  <td className="max-w-sm px-4 py-3 text-slate-600">
-                    {lastMessage ? lastMessage.content : '-'}
+                  <td className="px-4 py-3 text-slate-600">
+                    {aiMessage?.confidenceScore !== undefined && aiMessage?.confidenceScore !== null
+                      ? `${Math.round(aiMessage.confidenceScore * 100)}%`
+                      : '-'}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-col gap-1">
+                      <button
+                        onClick={() => onCloseTicket(ticket)}
+                        disabled={isUpdating}
+                        className="rounded-md border border-emerald-300 px-2 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Cerrar Ticket
+                      </button>
+                      <button
+                        onClick={() => onReassignTicket(ticket)}
+                        disabled={isUpdating}
+                        className="rounded-md border border-amber-300 px-2 py-1 text-xs font-medium text-amber-700 hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Reasignar a Humano
+                      </button>
+                    </div>
                   </td>
                 </tr>
               );

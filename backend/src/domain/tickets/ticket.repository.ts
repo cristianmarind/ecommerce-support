@@ -1,4 +1,5 @@
 import { Ticket } from './ticket.entity';
+import { TicketStatus } from './ticket-status.enum';
 
 export interface PaginatedResult<T> {
   items: T[];
@@ -17,4 +18,9 @@ export interface TicketRepository {
   create(ticket: Ticket): Promise<Ticket>;
   findById(id: string): Promise<Ticket | null>;
   findAll(page: number, limit: number): Promise<PaginatedResult<Ticket>>;
+  updateStatus(
+    id: string,
+    status: TicketStatus,
+    updaterId: string,
+  ): Promise<Ticket>;
 }

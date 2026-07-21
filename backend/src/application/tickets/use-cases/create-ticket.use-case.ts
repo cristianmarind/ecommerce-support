@@ -13,6 +13,10 @@ import {
   MESSAGE_REPOSITORY,
   MessageRepository,
 } from '../../../domain/messages/message.repository';
+import {
+  RAG_QUERY_PORT,
+  RagQueryPort,
+} from '../../../domain/knowledge-base/rag-query.port';
 
 @Injectable()
 export class CreateTicketUseCase {
@@ -21,11 +25,13 @@ export class CreateTicketUseCase {
     private readonly ticketRepository: TicketRepository,
     @Inject(MESSAGE_REPOSITORY)
     private readonly messageRepository: MessageRepository,
+    @Inject(RAG_QUERY_PORT)
+    private readonly ragQueryPort: RagQueryPort,
   ) {}
 
   async execute(description: string, creatorId: string): Promise<Ticket> {
-    // TODO: por ahora la categoría, el estado y la respuesta de IA quedan quemados.
-    // Cuando se integre IA real, este caso de uso invocará el servicio de clasificación.
+    // TODO: la categoría y el estado inicial del ticket siguen quemados.
+    // La respuesta/confianza del primer mensaje de IA ya sale del RAG real.
     const now = new Date();
     const ticketId = randomUUID();
 
@@ -43,13 +49,16 @@ export class CreateTicketUseCase {
 
     const createdTicket = await this.ticketRepository.create(ticket);
 
+    const { aiSuggestedResponse, confidenceScore } =
+      await this.ragQueryPort.query(description);
+
     const initialMessage = new Message(
       randomUUID(),
       ticketId,
       MessageSenderType.AI,
-      'Un agente revisará tu caso y te responderá a la brevedad.',
-      'Un agente revisará tu caso y te responderá a la brevedad.',
-      0.65,
+      aiSuggestedResponse,
+      aiSuggestedResponse,
+      confidenceScore,
       now,
       now,
       null, // la IA no es un User, no tiene creatorId humano

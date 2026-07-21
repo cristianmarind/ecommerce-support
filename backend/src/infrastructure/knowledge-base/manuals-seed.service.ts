@@ -1,21 +1,21 @@
-import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import * as fs from 'fs';
 import * as path from 'path';
 import PDFDocument from 'pdfkit';
 import { MANUALS_CONTENT, ManualContent } from './manuals.data';
 
-const MANUALS_DIR = path.join(process.cwd(), 'manuales');
+export const MANUALS_DIR = path.join(process.cwd(), 'manuales');
 
 /**
- * Genera los PDF de manuales de resolución por categoría al levantar la app,
- * solo si todavía no existen (seed idempotente). Todavía no se usan en ningún
- * flujo — son la base de conocimiento que más adelante consumirá la IA.
+ * Genera los PDF de manuales de resolución por categoría, solo si todavía no
+ * existen (idempotente). Se dispara desde KnowledgeBaseBootstrapService al
+ * levantar la app, antes de indexarlos en Redis.
  */
 @Injectable()
-export class ManualsSeedService implements OnApplicationBootstrap {
+export class ManualsSeedService {
   private readonly logger = new Logger(ManualsSeedService.name);
 
-  onApplicationBootstrap(): void {
+  generate(): void {
     if (!fs.existsSync(MANUALS_DIR)) {
       fs.mkdirSync(MANUALS_DIR, { recursive: true });
     }

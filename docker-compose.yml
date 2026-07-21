@@ -17,6 +17,22 @@ services:
       timeout: 5s
       retries: 5
 
+  redis:
+    # redis-stack-server (no el redis:alpine básico) porque trae RediSearch,
+    # el módulo que habilita búsqueda vectorial usada por LangChain para el RAG.
+    image: redis/redis-stack-server:latest
+    container_name: imagineapps-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   backend:
     build:
       context: ./backend
@@ -27,6 +43,7 @@ services:
       - ./backend/.env
     environment:
       DB_HOST: postgres
+      REDIS_URL: redis://redis:6379
     ports:
       - "3001:3001"
     volumes:
@@ -34,6 +51,8 @@ services:
       - backend_node_modules:/app/node_modules
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
   frontend:
@@ -54,5 +73,6 @@ services:
 
 volumes:
   postgres_data:
+  redis_data:
   backend_node_modules:
   frontend_node_modules:

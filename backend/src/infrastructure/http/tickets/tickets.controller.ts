@@ -6,6 +6,7 @@ import {
   Param,
   ParseIntPipe,
   ParseUUIDPipe,
+  Patch,
   Post,
   Query,
   UseGuards,
@@ -13,6 +14,7 @@ import {
 import { CreateTicketUseCase } from '../../../application/tickets/use-cases/create-ticket.use-case';
 import { ListTicketsUseCase } from '../../../application/tickets/use-cases/list-tickets.use-case';
 import { SendMessageUseCase } from '../../../application/tickets/use-cases/send-message.use-case';
+import { UpdateTicketStatusUseCase } from '../../../application/tickets/use-cases/update-ticket-status.use-case';
 import { CurrentUserId } from '../auth/decorators/current-user-id.decorator';
 import { FakeAuthGuard } from '../auth/guards/fake-auth.guard';
 import { CreateMessageRequestDto } from './dto/create-message-request.dto';
@@ -20,6 +22,7 @@ import { CreateTicketRequestDto } from './dto/create-ticket-request.dto';
 import { MessageResponseDto } from './dto/message-response.dto';
 import { PaginatedTicketsResponseDto } from './dto/paginated-tickets-response.dto';
 import { TicketResponseDto } from './dto/ticket-response.dto';
+import { UpdateTicketStatusRequestDto } from './dto/update-ticket-status-request.dto';
 
 @UseGuards(FakeAuthGuard)
 @Controller('tickets')
@@ -28,6 +31,7 @@ export class TicketsController {
     private readonly createTicketUseCase: CreateTicketUseCase,
     private readonly listTicketsUseCase: ListTicketsUseCase,
     private readonly sendMessageUseCase: SendMessageUseCase,
+    private readonly updateTicketStatusUseCase: UpdateTicketStatusUseCase,
   ) {}
 
   @Post()
@@ -73,5 +77,19 @@ export class TicketsController {
       customerId,
     );
     return MessageResponseDto.fromDomain(message);
+  }
+
+  @Patch(':id/status')
+  async updateStatus(
+    @Param('id', ParseUUIDPipe) ticketId: string,
+    @Body() dto: UpdateTicketStatusRequestDto,
+    @CurrentUserId('admin') adminId: string,
+  ): Promise<TicketResponseDto> {
+    const ticket = await this.updateTicketStatusUseCase.execute(
+      ticketId,
+      dto.status,
+      adminId,
+    );
+    return TicketResponseDto.fromDomain(ticket);
   }
 }

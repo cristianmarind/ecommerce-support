@@ -1,10 +1,10 @@
 'use client';
 
 import { FormEvent, useState } from 'react';
-import { createTicket } from '@/lib/api';
+import { createTicket, Ticket } from '@/lib/api';
 
 interface TicketFormProps {
-  onCreated: () => void;
+  onCreated: (ticket: Ticket) => void;
 }
 
 export function TicketForm({ onCreated }: TicketFormProps) {
@@ -20,9 +20,9 @@ export function TicketForm({ onCreated }: TicketFormProps) {
     setError(null);
 
     try {
-      await createTicket(description.trim());
+      const ticket = await createTicket(description.trim());
       setDescription('');
-      onCreated();
+      onCreated(ticket);
     } catch {
       setError('Ocurrió un error al crear el ticket. Intenta de nuevo.');
     } finally {
