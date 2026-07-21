@@ -3,13 +3,23 @@
 import { FormEvent, useState } from 'react';
 
 interface SendMessageFormProps {
-  onSend: (content: string) => Promise<void>;
+  onSend?: (content: string) => Promise<void>;
+  /** Si viene seteado, no se renderiza el formulario: solo este mensaje. */
+  disabledMessage?: string;
 }
 
-export function SendMessageForm({ onSend }: SendMessageFormProps) {
+export function SendMessageForm({ onSend, disabledMessage }: SendMessageFormProps) {
   const [content, setContent] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  if (disabledMessage) {
+    return (
+      <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
+        {disabledMessage}
+      </div>
+    );
+  }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -19,7 +29,7 @@ export function SendMessageForm({ onSend }: SendMessageFormProps) {
     setError(null);
 
     try {
-      await onSend(content.trim());
+      await onSend?.(content.trim());
       setContent('');
     } catch {
       setError('Ocurrió un error al enviar el mensaje. Intenta de nuevo.');
