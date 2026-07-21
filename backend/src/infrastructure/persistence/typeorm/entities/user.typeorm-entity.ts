@@ -10,6 +10,13 @@ export class UserTypeOrmEntity extends AuditableBaseEntity {
   @Column()
   name: string;
 
+  @Column({ name: 'password_hash' })
+  passwordHash: string;
+
+  /** Hash del refresh token vigente; null si no tiene sesión activa (logout). */
+  @Column({ name: 'refresh_token_hash', type: 'varchar', nullable: true })
+  refreshTokenHash: string | null;
+
   @Column({ name: 'role_id', type: 'uuid' })
   roleId: string;
 
