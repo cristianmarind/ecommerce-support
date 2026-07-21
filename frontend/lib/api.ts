@@ -76,6 +76,62 @@ export async function sendMessage(ticketId: string, content: string): Promise<Me
   return res.json();
 }
 
+export async function sendAgentMessage(ticketId: string, content: string): Promise<Message> {
+  const res = await fetch(`${API_URL}/tickets/${ticketId}/agent-messages`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content }),
+  });
+
+  if (!res.ok) {
+    throw new Error('No se pudo enviar el mensaje');
+  }
+
+  return res.json();
+}
+
+/** Lista paginada de los tickets del cliente autenticado ("mis casos"). */
+export async function getMyTickets(
+  page: number,
+  limit: number,
+): Promise<PaginatedTickets> {
+  const res = await fetch(`${API_URL}/tickets/mine?page=${page}&limit=${limit}`, {
+    cache: 'no-store',
+  });
+
+  if (!res.ok) {
+    throw new Error('No se pudo obtener tus tickets');
+  }
+
+  return res.json();
+}
+
+/** Detalle de un ticket propio del cliente. */
+export async function getMyTicketDetail(ticketId: string): Promise<Ticket> {
+  const res = await fetch(`${API_URL}/tickets/mine/${ticketId}`, {
+    cache: 'no-store',
+  });
+
+  if (!res.ok) {
+    throw new Error('No se pudo obtener el ticket');
+  }
+
+  return res.json();
+}
+
+/** Detalle de cualquier ticket, para el panel de admin. */
+export async function getTicketDetail(ticketId: string): Promise<Ticket> {
+  const res = await fetch(`${API_URL}/tickets/${ticketId}`, {
+    cache: 'no-store',
+  });
+
+  if (!res.ok) {
+    throw new Error('No se pudo obtener el ticket');
+  }
+
+  return res.json();
+}
+
 export async function updateTicketStatus(
   ticketId: string,
   status: TicketStatus,

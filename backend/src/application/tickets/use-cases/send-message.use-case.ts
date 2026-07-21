@@ -24,6 +24,7 @@ export class SendMessageUseCase {
     ticketId: string,
     content: string,
     creatorId: string,
+    senderType: MessageSenderType = MessageSenderType.CUSTOMER,
   ): Promise<Message> {
     const ticket = await this.ticketRepository.findById(ticketId);
     if (!ticket) {
@@ -34,7 +35,7 @@ export class SendMessageUseCase {
     const message = new Message(
       randomUUID(),
       ticketId,
-      MessageSenderType.CUSTOMER,
+      senderType,
       content,
       null,
       null,

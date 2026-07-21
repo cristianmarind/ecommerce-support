@@ -13,7 +13,12 @@ export class ListTicketsUseCase {
     private readonly ticketRepository: TicketRepository,
   ) {}
 
-  execute(page: number, limit: number): Promise<PaginatedResult<Ticket>> {
-    return this.ticketRepository.findAll(page, limit);
+  /** Si se pasa creatorId, solo lista los tickets de ese usuario (vista "mis casos"). */
+  execute(
+    page: number,
+    limit: number,
+    creatorId?: string,
+  ): Promise<PaginatedResult<Ticket>> {
+    return this.ticketRepository.findAll(page, limit, creatorId);
   }
 }

@@ -1,16 +1,38 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { CustomerTicketsList } from '@/components/CustomerTicketsList';
 import { TicketForm } from '@/components/TicketForm';
-import { Ticket } from '@/lib/api';
+import { getMyTickets, PaginatedTickets, Ticket } from '@/lib/api';
 import { logout } from '@/lib/auth';
 import { useAuthGuard } from '@/lib/use-auth-guard';
+
+const PAGE_SIZE = 5;
 
 export default function ClientePage() {
   const session = useAuthGuard('cliente');
   const router = useRouter();
   const [lastTicket, setLastTicket] = useState<Ticket | null>(null);
+
+  const [data, setData] = useState<PaginatedTickets | null>(null);
+  const [page, setPage] = useState(1);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const fetchMyTickets = useCallback(async (targetPage: number) => {
+    setIsLoading(true);
+    try {
+      const result = await getMyTickets(targetPage, PAGE_SIZE);
+      setData(result);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!session) return;
+    fetchMyTickets(page);
+  }, [session, page, fetchMyTickets]);
 
   if (!session) {
     return null;
@@ -19,6 +41,12 @@ export default function ClientePage() {
   function handleLogout() {
     logout();
     router.push('/login');
+  }
+
+  function handleCreated(ticket: Ticket) {
+    setLastTicket(ticket);
+    setPage(1);
+    fetchMyTickets(1);
   }
 
   const aiMessage = lastTicket?.messages.find((m) => m.senderType === 'IA');
@@ -41,7 +69,7 @@ export default function ClientePage() {
         </button>
       </div>
 
-      <TicketForm onCreated={setLastTicket} />
+      <TicketForm onCreated={handleCreated} />
 
       {lastTicket && (
         <div className="flex flex-col gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
@@ -55,6 +83,11 @@ export default function ClientePage() {
           </p>
         </div>
       )}
+
+      <div className="flex flex-col gap-3">
+        <h2 className="text-lg font-semibold text-slate-900">Mis casos</h2>
+        <CustomerTicketsList data={data} isLoading={isLoading} onPageChange={setPage} />
+      </div>
     </main>
   );
 }

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Message } from '../../../../domain/messages/message.entity';
 import { Ticket } from '../../../../domain/tickets/ticket.entity';
 import { TicketStatus } from '../../../../domain/tickets/ticket-status.enum';
@@ -45,12 +45,34 @@ export class TicketTypeOrmRepository implements TicketRepository {
     );
   }
 
-  async findAll(page: number, limit: number): Promise<PaginatedResult<Ticket>> {
-    const [entities, total] = await this.ticketRepo.findAndCount({
-      relations: { messages: true },
-      order: { createdAt: 'DESC', messages: { createdAt: 'ASC' } },
+  async findAll(
+    page: number,
+    limit: number,
+    creatorId?: string,
+  ): Promise<PaginatedResult<Ticket>> {
+    const where = creatorId ? { creatorId } : {};
+
+    // Paginamos primero solo los ids (sin la relation "messages"): con
+    // relations + skip/take en la misma consulta, TypeORM arma un JOIN y el
+    // LIMIT termina aplicando sobre combinaciones ticket-mensaje en vez de
+    // tickets distintos (con tickets de 1 solo mensaje no se nota; con 2+
+    // mensajes, la página puede traer menos tickets de los que corresponde).
+    const [idRows, total] = await this.ticketRepo.findAndCount({
+      select: { id: true },
+      where,
+      order: { createdAt: 'DESC' },
       skip: (page - 1) * limit,
       take: limit,
+    });
+
+    if (idRows.length === 0) {
+      return { items: [], total, page, limit };
+    }
+
+    const entities = await this.ticketRepo.find({
+      where: { id: In(idRows.map((row) => row.id)) },
+      relations: { messages: true },
+      order: { createdAt: 'DESC', messages: { createdAt: 'ASC' } },
     });
 
     return {

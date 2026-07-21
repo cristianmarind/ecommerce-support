@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { CreateTicketUseCase } from '../../../application/tickets/use-cases/create-ticket.use-case';
+import { GetTicketByIdUseCase } from '../../../application/tickets/use-cases/get-ticket-by-id.use-case';
 import { ListTicketsUseCase } from '../../../application/tickets/use-cases/list-tickets.use-case';
 import { SendMessageUseCase } from '../../../application/tickets/use-cases/send-message.use-case';
 import { UpdateTicketStatusUseCase } from '../../../application/tickets/use-cases/update-ticket-status.use-case';
@@ -25,6 +26,7 @@ import { TicketsController } from './tickets.controller';
   providers: [
     CreateTicketUseCase,
     ListTicketsUseCase,
+    GetTicketByIdUseCase,
     SendMessageUseCase,
     UpdateTicketStatusUseCase,
     PromptSafetyGuard,

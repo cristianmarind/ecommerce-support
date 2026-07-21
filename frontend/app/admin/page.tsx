@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { AdminTicketsTable } from '@/components/AdminTicketsTable';
-import { getTickets, PaginatedTickets, Ticket, updateTicketStatus } from '@/lib/api';
+import { getTickets, PaginatedTickets } from '@/lib/api';
 import { logout } from '@/lib/auth';
 import { useAuthGuard } from '@/lib/use-auth-guard';
 
@@ -16,8 +16,6 @@ export default function AdminPage() {
   const [data, setData] = useState<PaginatedTickets | null>(null);
   const [page, setPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
-  const [updatingTicketId, setUpdatingTicketId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
   const fetchTickets = useCallback(async (targetPage: number) => {
     setIsLoading(true);
@@ -43,19 +41,6 @@ export default function AdminPage() {
     router.push('/login');
   }
 
-  async function handleStatusChange(ticket: Ticket, status: Ticket['status']) {
-    setError(null);
-    setUpdatingTicketId(ticket.id);
-    try {
-      await updateTicketStatus(ticket.id, status);
-      await fetchTickets(page);
-    } catch {
-      setError('No se pudo actualizar el ticket. Intenta de nuevo.');
-    } finally {
-      setUpdatingTicketId(null);
-    }
-  }
-
   return (
     <main className="mx-auto flex max-w-5xl flex-col gap-6 px-4 py-10">
       <div className="flex items-start justify-between">
@@ -73,17 +58,7 @@ export default function AdminPage() {
         </button>
       </div>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
-
-      <AdminTicketsTable
-        data={data}
-        isLoading={isLoading}
-        updatingTicketId={updatingTicketId}
-        onPageChange={setPage}
-        onCloseTicket={(ticket) => handleStatusChange(ticket, 'RESUELTO_AGENTE')}
-        onReassignTicket={(ticket) => handleStatusChange(ticket, 'PENDIENTE_AGENTE')}
-        onConfirmAiResolution={(ticket) => handleStatusChange(ticket, 'RESUELTO_IA')}
-      />
+      <AdminTicketsTable data={data} isLoading={isLoading} onPageChange={setPage} />
     </main>
   );
 }

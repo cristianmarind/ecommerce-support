@@ -7,7 +7,7 @@ import { DEMO_EMAILS, login } from '@/lib/auth';
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState(DEMO_EMAILS[0]);
-  const [password, setPassword] = useState('');
+  const [password, setPassword] = useState('password');
   const [error, setError] = useState<string | null>(null);
 
   function handleSubmit(event: FormEvent) {
