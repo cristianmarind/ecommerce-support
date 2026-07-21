@@ -51,6 +51,22 @@ export interface PaginatedTickets {
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1';
 
 /**
+ * El backend manda mensajes de error explícitos (ej. PromptSafetyGuard
+ * explicando por qué bloqueó el contenido) en el body como `message`. Sin
+ * esto, el frontend mostraba un texto genérico y el usuario nunca se
+ * enteraba del motivo real (ej. que su mensaje fue rechazado por seguridad).
+ */
+async function extractErrorMessage(res: Response, fallback: string): Promise<string> {
+  try {
+    const body = await res.json();
+    if (typeof body?.message === 'string') return body.message;
+  } catch {
+    // Body no era JSON o vino vacío: nos quedamos con el fallback.
+  }
+  return fallback;
+}
+
+/**
  * fetch con el access token vigente. Si el backend responde 401 (token
  * vencido o inválido), intenta renovarlo una vez con el refresh token y
  * reintenta el request original; si la renovación también falla, limpia la
@@ -87,7 +103,7 @@ export async function createTicket(description: string): Promise<Ticket> {
   });
 
   if (!res.ok) {
-    throw new Error('No se pudo crear el ticket');
+    throw new Error(await extractErrorMessage(res, 'No se pudo crear el ticket'));
   }
 
   return res.json();
@@ -101,7 +117,7 @@ export async function sendAgentMessage(ticketId: string, content: string): Promi
   });
 
   if (!res.ok) {
-    throw new Error('No se pudo enviar el mensaje');
+    throw new Error(await extractErrorMessage(res, 'No se pudo enviar el mensaje'));
   }
 
   return res.json();

@@ -31,8 +31,12 @@ export function SendMessageForm({ onSend, disabledMessage }: SendMessageFormProp
     try {
       await onSend?.(content.trim());
       setContent('');
-    } catch {
-      setError('Ocurrió un error al enviar el mensaje. Intenta de nuevo.');
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Ocurrió un error al enviar el mensaje. Intenta de nuevo.',
+      );
     } finally {
       setIsSubmitting(false);
     }

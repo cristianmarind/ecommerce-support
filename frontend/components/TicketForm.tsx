@@ -23,8 +23,12 @@ export function TicketForm({ onCreated }: TicketFormProps) {
       const ticket = await createTicket(description.trim());
       setDescription('');
       onCreated(ticket);
-    } catch {
-      setError('Ocurrió un error al crear el ticket. Intenta de nuevo.');
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Ocurrió un error al crear el ticket. Intenta de nuevo.',
+      );
     } finally {
       setIsSubmitting(false);
     }

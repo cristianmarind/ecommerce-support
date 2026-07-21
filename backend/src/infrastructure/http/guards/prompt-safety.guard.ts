@@ -41,7 +41,7 @@ export class PromptSafetyGuard implements CanActivate {
         `Petición bloqueada por PromptSafetyGuard en el campo "${field}".`,
       );
       throw new BadRequestException(
-        'El contenido enviado no pasó la validación de seguridad.',
+        'No pudimos procesar tu mensaje: el contenido no pasó la validación de seguridad. Reformulalo e intentá de nuevo.',
       );
     }
 
