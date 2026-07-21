@@ -11,9 +11,9 @@ const AppDataSource = new DataSource({
   type: 'postgres',
   host: process.env.DB_HOST ?? 'localhost',
   port: Number(process.env.DB_PORT ?? 5432),
-  username: process.env.DB_USER ?? 'postgres',
-  password: process.env.DB_PASSWORD ?? 'postgres',
-  database: process.env.DB_NAME ?? 'imagineapps',
+  username: process.env.POSTGRES_USER ?? 'postgres',
+  password: process.env.POSTGRES_PASSWORD ?? 'postgres',
+  database: process.env.POSTGRES_DB ?? 'imagineapps',
   entities: [join(__dirname, '../persistence/typeorm/entities/*.ts')],
   migrations: [join(__dirname, '../persistence/typeorm/migrations/*.ts')],
 });
