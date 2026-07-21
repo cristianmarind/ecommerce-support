@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { PaginatedTickets } from '@/lib/api';
-import { categoryLabels, statusColors, statusLabels } from '@/lib/labels';
+import { categoryLabels, customerStatusLabels, statusColors } from '@/lib/labels';
 
 interface CustomerTicketsListProps {
   data: PaginatedTickets | null;
@@ -41,7 +41,7 @@ export function CustomerTicketsList({
             <span
               className={`inline-flex shrink-0 rounded-full px-2 py-1 text-xs font-medium ${statusColors[ticket.status]}`}
             >
-              {statusLabels[ticket.status]}
+              {customerStatusLabels[ticket.status]}
             </span>
           </Link>
         ))}
