@@ -1,0 +1,4 @@
+export enum TicketStatus {
+  RESOLVED_BY_AI = 'RESUELTO_IA',
+  PENDING_AGENT = 'PENDIENTE_AGENTE',
+}

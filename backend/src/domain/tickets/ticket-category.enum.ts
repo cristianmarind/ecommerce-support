@@ -1,0 +1,7 @@
+export enum TicketCategory {
+  BILLING = 'FACTURACION',
+  SHIPPING = 'ENVIOS',
+  RETURNS = 'DEVOLUCIONES',
+  TECHNICAL = 'TECNICO',
+  GENERAL = 'GENERAL',
+}
