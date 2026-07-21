@@ -2,8 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { RedisVectorStore } from '@langchain/redis';
 import { createClient, RedisClientType } from 'redis';
-import { loadAiConfig } from './ai-config';
-import { buildEmbeddings } from './model-factory';
+import { AiModelFactory } from '../../ai/ai-model.factory';
 
 /**
  * Crea (una sola vez, de forma perezosa) la conexión a Redis y el vector store
@@ -17,7 +16,10 @@ export class VectorStoreProvider {
   private client: RedisClientType | null = null;
   private store: RedisVectorStore | null = null;
 
-  constructor(private readonly configService: ConfigService) {}
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly aiModelFactory: AiModelFactory,
+  ) {}
 
   async getClient(): Promise<RedisClientType> {
     if (this.client) return this.client;
@@ -34,8 +36,7 @@ export class VectorStoreProvider {
   async getStore(): Promise<RedisVectorStore | null> {
     if (this.store) return this.store;
 
-    const aiConfig = loadAiConfig(this.configService);
-    const embeddings = buildEmbeddings(aiConfig);
+    const embeddings = this.aiModelFactory.getEmbeddings();
     if (!embeddings) {
       this.logger.warn(
         'RAG deshabilitado: falta configurar la API key de embeddings (AI_API_KEY/OPENAI_API_KEY).',

@@ -265,6 +265,10 @@ que haya autenticación real que proteger.
 - No agregar abstracciones para casos hipotéticos futuros (feature flags, capas extra)
   hasta que el requisito exista.
 - Sin tests todavía — no hay convención establecida aún.
+- **No hacer `git commit` sin que el usuario lo pida explícitamente para ese cambio
+  puntual**, aunque haya pedido la feature que originó el cambio. Dejar el trabajo en el
+  working tree para que lo revise antes de comitear. Esto aplica incluso en tareas
+  largas de varios pasos: no comitear "al terminar" por iniciativa propia.
 
 ## Próximos pasos conocidos
 

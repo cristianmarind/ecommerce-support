@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { RAG_QUERY_PORT } from '../../domain/knowledge-base/rag-query.port';
+import { AiModule } from '../ai/ai.module';
 import { KnowledgeBaseBootstrapService } from './knowledge-base-bootstrap.service';
 import { ManualsSeedService } from './manuals-seed.service';
 import { LangchainRagService } from './rag/langchain-rag.service';
@@ -7,6 +8,7 @@ import { ManualsIndexingService } from './rag/manuals-indexing.service';
 import { VectorStoreProvider } from './rag/vector-store.provider';
 
 @Module({
+  imports: [AiModule],
   providers: [
     ManualsSeedService,
     VectorStoreProvider,

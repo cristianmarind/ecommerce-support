@@ -1,12 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { Document } from '@langchain/core/documents';
 import {
   RagAnswer,
   RagQueryPort,
 } from '../../../domain/knowledge-base/rag-query.port';
-import { loadAiConfig } from './ai-config';
-import { buildChatModel } from './model-factory';
+import { AiModelFactory } from '../../ai/ai-model.factory';
 import { VectorStoreProvider } from './vector-store.provider';
 
 const NOT_CONFIGURED_ANSWER: RagAnswer = {
@@ -44,13 +42,12 @@ export class LangchainRagService implements RagQueryPort {
 
   constructor(
     private readonly vectorStoreProvider: VectorStoreProvider,
-    private readonly configService: ConfigService,
+    private readonly aiModelFactory: AiModelFactory,
   ) {}
 
   async query(question: string): Promise<RagAnswer> {
     try {
-      const aiConfig = loadAiConfig(this.configService);
-      const chatModel = buildChatModel(aiConfig);
+      const chatModel = this.aiModelFactory.getChatModel();
       const store = await this.vectorStoreProvider.getStore();
 
       if (!chatModel || !store) {
