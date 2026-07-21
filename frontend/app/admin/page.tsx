@@ -36,8 +36,8 @@ export default function AdminPage() {
     return null;
   }
 
-  function handleLogout() {
-    logout();
+  async function handleLogout() {
+    await logout();
     router.push('/login');
   }
 

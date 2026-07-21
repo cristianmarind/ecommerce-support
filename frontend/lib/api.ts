@@ -1,3 +1,5 @@
+import { clearSession, getAccessToken, refreshAccessToken } from './auth';
+
 export type TicketStatus =
   | 'RESOLVIENDO_IA'
   | 'RESUELTO_IA'
@@ -48,8 +50,37 @@ export interface PaginatedTickets {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1';
 
+/**
+ * fetch con el access token vigente. Si el backend responde 401 (token
+ * vencido o inválido), intenta renovarlo una vez con el refresh token y
+ * reintenta el request original; si la renovación también falla, limpia la
+ * sesión y manda a /login.
+ */
+async function authFetch(path: string, options: RequestInit = {}): Promise<Response> {
+  const doFetch = (token: string | null) =>
+    fetch(`${API_URL}${path}`, {
+      ...options,
+      headers: {
+        ...(options.headers ?? {}),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+
+  const res = await doFetch(getAccessToken());
+  if (res.status !== 401) return res;
+
+  const newAccessToken = await refreshAccessToken();
+  if (!newAccessToken) {
+    clearSession();
+    if (typeof window !== 'undefined') window.location.href = '/login';
+    return res;
+  }
+
+  return doFetch(newAccessToken);
+}
+
 export async function createTicket(description: string): Promise<Ticket> {
-  const res = await fetch(`${API_URL}/tickets`, {
+  const res = await authFetch('/tickets', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ description }),
@@ -62,22 +93,8 @@ export async function createTicket(description: string): Promise<Ticket> {
   return res.json();
 }
 
-export async function sendMessage(ticketId: string, content: string): Promise<Message> {
-  const res = await fetch(`${API_URL}/tickets/${ticketId}/messages`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ content }),
-  });
-
-  if (!res.ok) {
-    throw new Error('No se pudo enviar el mensaje');
-  }
-
-  return res.json();
-}
-
 export async function sendAgentMessage(ticketId: string, content: string): Promise<Message> {
-  const res = await fetch(`${API_URL}/tickets/${ticketId}/agent-messages`, {
+  const res = await authFetch(`/tickets/${ticketId}/agent-messages`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ content }),
@@ -95,7 +112,7 @@ export async function getMyTickets(
   page: number,
   limit: number,
 ): Promise<PaginatedTickets> {
-  const res = await fetch(`${API_URL}/tickets/mine?page=${page}&limit=${limit}`, {
+  const res = await authFetch(`/tickets/mine?page=${page}&limit=${limit}`, {
     cache: 'no-store',
   });
 
@@ -108,7 +125,7 @@ export async function getMyTickets(
 
 /** Detalle de un ticket propio del cliente. */
 export async function getMyTicketDetail(ticketId: string): Promise<Ticket> {
-  const res = await fetch(`${API_URL}/tickets/mine/${ticketId}`, {
+  const res = await authFetch(`/tickets/mine/${ticketId}`, {
     cache: 'no-store',
   });
 
@@ -121,7 +138,7 @@ export async function getMyTicketDetail(ticketId: string): Promise<Ticket> {
 
 /** Detalle de cualquier ticket, para el panel de admin. */
 export async function getTicketDetail(ticketId: string): Promise<Ticket> {
-  const res = await fetch(`${API_URL}/tickets/${ticketId}`, {
+  const res = await authFetch(`/tickets/${ticketId}`, {
     cache: 'no-store',
   });
 
@@ -136,7 +153,7 @@ export async function updateTicketStatus(
   ticketId: string,
   status: TicketStatus,
 ): Promise<Ticket> {
-  const res = await fetch(`${API_URL}/tickets/${ticketId}/status`, {
+  const res = await authFetch(`/tickets/${ticketId}/status`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ status }),
@@ -153,7 +170,7 @@ export async function getTickets(
   page: number,
   limit: number,
 ): Promise<PaginatedTickets> {
-  const res = await fetch(`${API_URL}/tickets?page=${page}&limit=${limit}`, {
+  const res = await authFetch(`/tickets?page=${page}&limit=${limit}`, {
     cache: 'no-store',
   });
 

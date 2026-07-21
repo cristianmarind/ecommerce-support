@@ -9,17 +9,24 @@ export default function LoginPage() {
   const [email, setEmail] = useState(DEMO_EMAILS[0]);
   const [password, setPassword] = useState('password');
   const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  function handleSubmit(event: FormEvent) {
+  async function handleSubmit(event: FormEvent) {
     event.preventDefault();
+    setError(null);
+    setIsSubmitting(true);
 
-    const session = login(email, password);
-    if (!session) {
-      setError('Credenciales inválidas. Pista: la contraseña es "password".');
-      return;
+    try {
+      const session = await login(email, password);
+      if (!session) {
+        setError('Credenciales inválidas. Pista: la contraseña es "password".');
+        return;
+      }
+
+      router.push(session.role === 'admin' ? '/admin' : '/cliente');
+    } finally {
+      setIsSubmitting(false);
     }
-
-    router.push(session.role === 'admin' ? '/admin' : '/cliente');
   }
 
   return (
@@ -27,7 +34,7 @@ export default function LoginPage() {
       <div>
         <h1 className="text-2xl font-semibold text-slate-900">Iniciar sesión</h1>
         <p className="text-sm text-slate-500">
-          Login de demo (usuarios quemados) — soporte ImagineApps.
+          Soporte ImagineApps — usuarios demo, contraseña "password".
         </p>
       </div>
 
@@ -67,9 +74,10 @@ export default function LoginPage() {
 
         <button
           type="submit"
-          className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-700"
+          disabled={isSubmitting}
+          className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          Entrar
+          {isSubmitting ? 'Entrando...' : 'Entrar'}
         </button>
       </form>
     </main>

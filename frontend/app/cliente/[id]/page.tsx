@@ -5,12 +5,12 @@ import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { MessageThread } from '@/components/MessageThread';
 import { SendMessageForm } from '@/components/SendMessageForm';
-import { getMyTicketDetail, sendMessage, Ticket } from '@/lib/api';
-import { categoryLabels, statusColors, statusLabels } from '@/lib/labels';
+import { getMyTicketDetail, Ticket } from '@/lib/api';
+import { categoryLabels, customerStatusLabels, statusColors } from '@/lib/labels';
 import { useAuthGuard } from '@/lib/use-auth-guard';
 
 export default function ClienteTicketDetailPage() {
-  const session = useAuthGuard('cliente');
+  const session = useAuthGuard('user');
   const params = useParams<{ id: string }>();
   const ticketId = params.id;
 
@@ -40,11 +40,6 @@ export default function ClienteTicketDetailPage() {
     return null;
   }
 
-  async function handleSend(content: string) {
-    await sendMessage(ticketId, content);
-    await fetchTicket();
-  }
-
   return (
     <main className="mx-auto flex max-w-2xl flex-col gap-6 px-4 py-10">
       <Link href="/cliente" className="text-sm text-slate-500 underline hover:text-slate-700">
@@ -61,15 +56,15 @@ export default function ClienteTicketDetailPage() {
               <span
                 className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${statusColors[ticket.status]}`}
               >
-                {statusLabels[ticket.status]}
+                {customerStatusLabels[ticket.status]}
               </span>
               <span className="text-xs text-slate-500">{categoryLabels[ticket.category]}</span>
             </div>
             <p className="text-sm text-slate-800">{ticket.description}</p>
           </div>
 
-          <MessageThread messages={ticket.messages} viewerRole="cliente" />
-          <SendMessageForm onSend={handleSend} />
+          <MessageThread messages={ticket.messages} viewerRole="user" />
+          <SendMessageForm disabledMessage="Enviar mensajes no está disponible en esta demo." />
         </>
       )}
     </main>

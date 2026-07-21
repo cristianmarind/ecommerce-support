@@ -11,9 +11,8 @@ import { useAuthGuard } from '@/lib/use-auth-guard';
 const PAGE_SIZE = 5;
 
 export default function ClientePage() {
-  const session = useAuthGuard('cliente');
+  const session = useAuthGuard('user');
   const router = useRouter();
-  const [lastTicket, setLastTicket] = useState<Ticket | null>(null);
 
   const [data, setData] = useState<PaginatedTickets | null>(null);
   const [page, setPage] = useState(1);
@@ -38,18 +37,14 @@ export default function ClientePage() {
     return null;
   }
 
-  function handleLogout() {
-    logout();
+  async function handleLogout() {
+    await logout();
     router.push('/login');
   }
 
   function handleCreated(ticket: Ticket) {
-    setLastTicket(ticket);
-    setPage(1);
-    fetchMyTickets(1);
+    router.push(`/cliente/${ticket.id}`);
   }
-
-  const aiMessage = lastTicket?.messages.find((m) => m.senderType === 'IA');
 
   return (
     <main className="mx-auto flex max-w-2xl flex-col gap-6 px-4 py-10">
@@ -57,8 +52,8 @@ export default function ClientePage() {
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">Hola, {session.name}</h1>
           <p className="text-sm text-slate-500">
-            Cuéntanos tu problema. La IA intentará resolverlo automáticamente; si no
-            puede, un agente humano lo atenderá.
+            Cuéntanos tu problema. Nuestro equipo de soporte te responderá a la
+            brevedad.
           </p>
         </div>
         <button
@@ -70,19 +65,6 @@ export default function ClientePage() {
       </div>
 
       <TicketForm onCreated={handleCreated} />
-
-      {lastTicket && (
-        <div className="flex flex-col gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
-          <p className="text-sm font-medium text-emerald-900">
-            {lastTicket.status === 'RESOLVIENDO_IA'
-              ? 'Respuesta de la IA:'
-              : 'Ticket creado:'}
-          </p>
-          <p className="text-sm text-emerald-800">
-            {aiMessage?.content ?? 'Un agente revisará tu caso pronto.'}
-          </p>
-        </div>
-      )}
 
       <div className="flex flex-col gap-3">
         <h2 className="text-lg font-semibold text-slate-900">Mis casos</h2>
