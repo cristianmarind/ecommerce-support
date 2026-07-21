@@ -6,11 +6,10 @@ export interface ManualContent {
 }
 
 /**
- * Contenido de los manuales de resolución por categoría. Todavía no se usan
- * en ningún flujo de la app — son la base de conocimiento que más adelante
- * consumirá la IA. Tipado contra las keys de TicketCategory para que si se
- * agrega/renombra una categoría, TypeScript obligue a mantener este mapa
- * sincronizado.
+ * Contenido de los manuales de resolución por categoría — la base de
+ * conocimiento que indexa ManualsIndexingService y consulta el RAG. Tipado
+ * contra las keys de TicketCategory para que si se agrega/renombra una
+ * categoría, TypeScript obligue a mantener este mapa sincronizado.
  */
 export const MANUALS_CONTENT: Record<keyof typeof TicketCategory, ManualContent> = {
   BILLING: {

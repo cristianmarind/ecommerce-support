@@ -4,20 +4,10 @@ import { MANUALS_CONTENT } from '../manuals.data';
 import { VectorStoreProvider } from './vector-store.provider';
 
 /**
- * Indexa el contenido de los manuales como vectores en Redis. Es idempotente:
- * si el índice ya tiene documentos, no vuelve a vectorizar (evita gastar
- * llamadas a la API de embeddings en cada reinicio del contenedor en modo
- * watch).
- *
- * Importante: indexa directamente MANUALS_CONTENT (el texto fuente), NO lee
- * de vuelta los PDF generados por ManualsSeedService. Se probó leer/parsear
- * los PDF con pdf-parse y resultó poco confiable en este entorno — generando
- * muchos documentos seguidos con pdfkit, una fracción salía con bytes
- * corruptos ("bad XRef entry") incluso esperando correctamente a que el
- * stream de escritura terminara. Como el texto de los manuales ya vive en
- * MANUALS_CONTENT, no hay necesidad de pasar por ese round-trip frágil
- * PDF→texto solo para indexar. Los PDF se siguen generando igual (para
- * cuando se quieran servir/descargar), pero quedan desacoplados del RAG.
+ * Indexa el contenido de los manuales (MANUALS_CONTENT, texto fuente) como
+ * vectores en Redis. Es idempotente: si el índice ya tiene documentos, no
+ * vuelve a vectorizar (evita gastar llamadas a la API de embeddings en cada
+ * reinicio del contenedor en modo watch).
  */
 @Injectable()
 export class ManualsIndexingService {

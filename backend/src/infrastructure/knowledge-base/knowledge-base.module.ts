@@ -6,7 +6,6 @@ import { TICKET_CLASSIFIER_PORT } from '../../domain/tickets/ticket-classifier.p
 import { AiModule } from '../ai/ai.module';
 import { loadAiConfig } from '../ai/ai-config';
 import { KnowledgeBaseBootstrapService } from './knowledge-base-bootstrap.service';
-import { ManualsSeedService } from './manuals-seed.service';
 import { LangchainRagService } from './rag/langchain-rag.service';
 import { ManualsIndexingService } from './rag/manuals-indexing.service';
 import { VectorStoreProvider } from './rag/vector-store.provider';
@@ -17,7 +16,6 @@ import { TicketClassifierService } from './ticket-classifier.service';
 @Module({
   imports: [AiModule],
   providers: [
-    ManualsSeedService,
     VectorStoreProvider,
     ManualsIndexingService,
     KnowledgeBaseBootstrapService,
